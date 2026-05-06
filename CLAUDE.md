@@ -115,6 +115,10 @@ TheBetterWe/
     └── .env.example
 ```
 
+## UI
+
+Build UI **view by view** — never scaffold multiple views at once without user approval. Follow the patterns in [`docs/ui-design-practices.md`](docs/ui-design-practices.md) for style constants, navigation transitions, form fields, password fields, and validation.
+
 ## Development Phases
 
 1. **Phase 1 (current)** — iOS app + local Node/Express server + PostgreSQL; user auth, family setup, personal + family TODOs/Done, Highlight of the Day
