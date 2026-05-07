@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct LoginView: View {
+    var onSuccess: () -> Void = {}
+
     @State private var username = ""
     @State private var password = ""
     @State private var isPasswordVisible = false
@@ -60,6 +62,7 @@ struct LoginView: View {
                         try? await Task.sleep(for: .seconds(2))
                         // TODO: call auth service
                         isLoading = false
+                        onSuccess()
                     }
                 } label: {
                     Group {
