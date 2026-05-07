@@ -16,6 +16,11 @@ struct TheBetterWeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .task {
+                    // Replace with real server base URL when backend is live.
+                    // guard let url = URL(string: "https://api.thebetterwe.com") else { return }
+                    // await FeatureToggle.shared.fetch(from: url)
+                }
         }
         .modelContainer(sharedModelContainer)
     }

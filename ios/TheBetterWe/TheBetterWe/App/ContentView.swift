@@ -1,8 +1,13 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var isAuthenticated = false
+
     var body: some View {
-        LoginView()
+        if isAuthenticated {
+            MainTabView()
+        } else {
+            LoginView(onSuccess: { isAuthenticated = true })
+        }
     }
 }
-    

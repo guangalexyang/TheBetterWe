@@ -146,6 +146,51 @@ private func validationRow(text: LocalizedStringKey, passed: Bool) -> some View 
 
 ---
 
+## Localization
+
+### Rule: English keys only in Swift
+
+The project's `sourceLanguage` is `"en"`. All string literals passed to `Text()`, `TextField()`, `LocalizedStringKey`, etc. **must be in English**. Chinese (and any other language) goes only in `Localizable.xcstrings` as a translation.
+
+```swift
+// ✅ correct — English key, Chinese translation in xcstrings
+Text("Home")         // shows "Home" in EN, "我家" in ZH
+
+// ❌ wrong — Chinese key, no English fallback
+Text("我家")         // shows "我家" in EN too, translation never applies
+```
+
+### xcstrings entry pattern
+
+```json
+"Home" : {
+  "localizations" : {
+    "zh-Hans" : {
+      "stringUnit" : { "state" : "translated", "value" : "我家" }
+    }
+  }
+}
+```
+
+### LocalizedStringKey in helpers
+
+Pass `LocalizedStringKey` (not `String`) to any `@ViewBuilder` helper that renders `Text`, otherwise SwiftUI treats the value as verbatim and skips localization lookup.
+
+```swift
+// ✅
+private func validationRow(text: LocalizedStringKey, passed: Bool) -> some View
+
+// ❌ — localization bypassed
+private func validationRow(text: String, passed: Bool) -> some View
+```
+
+### Testing translations
+
+- **In Xcode preview**: add a second `#Preview` with `.environment(\.locale, .init(identifier: "zh-Hans"))`
+- **In simulator**: Settings → General → Language & Region → Preferred Languages → add Chinese (Simplified), drag to top, restart
+
+---
+
 ## Async Button Actions
 
 Buttons that will eventually call a backend use a loading state to block double-taps and show feedback during the wait.
