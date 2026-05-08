@@ -4,7 +4,7 @@ final class FeatureToggle {
     static let shared = FeatureToggle()
 
     // Add keys here as features are gated.
-    enum Key: String, CaseIterable {}
+    enum Key: CaseIterable {}
 
     private static let cacheKey = "feature_toggle_flags"
     private var flags: [String: Bool] = [:]
@@ -16,16 +16,16 @@ final class FeatureToggle {
     // MARK: - Public API
 
     static func isActive(_ key: Key) -> Bool {
-        shared.flags[key.rawValue] ?? false
+        shared.flags[String(describing: key)] ?? false
     }
 
     static func enable(_ key: Key) {
-        shared.flags[key.rawValue] = true
+        shared.flags[String(describing: key)] = true
         shared.saveCache()
     }
 
     static func disable(_ key: Key) {
-        shared.flags[key.rawValue] = false
+        shared.flags[String(describing: key)] = false
         shared.saveCache()
     }
 

@@ -158,6 +158,46 @@
           }
         }
       }
+    },
+    "Invalid username or password." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户名或密码错误。"
+          }
+        }
+      }
+    },
+    "Username already taken." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户名已被占用。"
+          }
+        }
+      }
+    },
+    "Network error. Please try again." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "网络错误，请重试。"
+          }
+        }
+      }
+    },
+    "Log Out" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出登录"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

@@ -8,6 +8,7 @@ struct LoginView: View {
     @State private var isPasswordVisible = false
     @State private var navigateToSignUp = false
     @State private var isLoading = false
+    @State private var errorMessage: String?
 
     private var canLogIn: Bool { !username.isEmpty && PasswordValidator.isValid(password) }
 
@@ -56,13 +57,26 @@ struct LoginView: View {
                 .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius))
                 .padding(.bottom, AuthStyle.sectionSpacing)
 
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(.bottom, 8)
+                }
+
                 Button {
                     isLoading = true
+                    errorMessage = nil
                     Task {
-                        try? await Task.sleep(for: .seconds(2))
-                        // TODO: call auth service
+                        do {
+                            try await AuthService.logIn(username: username, password: password)
+                            onSuccess()
+                        } catch let error as AuthError {
+                            errorMessage = error.errorDescription
+                        } catch {
+                            errorMessage = AuthError.network.errorDescription
+                        }
                         isLoading = false
-                        onSuccess()
                     }
                 } label: {
                     Group {
@@ -95,7 +109,7 @@ struct LoginView: View {
             .padding(.horizontal, AuthStyle.screenHPadding)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $navigateToSignUp) {
-                SignUpView()
+                SignUpView(onSuccess: onSuccess)
             }
         }
     }

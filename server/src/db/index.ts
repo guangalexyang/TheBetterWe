@@ -1,2 +1,30 @@
-// Database connection — wired up when backend DB is chosen (Phase 4).
-export {};
+import Database from 'better-sqlite3';
+import path from 'path';
+
+const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, '../../data/betterwe.db');
+
+const db = new Database(DB_PATH);
+
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+    password_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+
+  CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    family_id TEXT NOT NULL,
+    token_hash TEXT UNIQUE NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+`);
+
+export default db;
