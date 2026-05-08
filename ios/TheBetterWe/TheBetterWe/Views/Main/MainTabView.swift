@@ -5,23 +5,96 @@ enum AppTab {
 }
 
 struct MainTabView: View {
+    var onLogOut: () -> Void = {}
+
     @State private var selectedTab: AppTab = .family
     @State private var showCreate = false
+    @State private var showMenu = false
 
     var body: some View {
-        Group {
-            switch selectedTab {
-            case .family: FamilyView()
-            case .me: MeView()
+        ZStack(alignment: .trailing) {
+            Group {
+                switch selectedTab {
+                case .family: FamilyView()
+                case .me: MeView(onMenuTap: {
+                    withAnimation(.easeInOut(duration: 0.25)) { showMenu = true }
+                })
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                CustomTabBar(selectedTab: $selectedTab, onPlus: { showCreate = true })
+            }
+
+            if showMenu {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.25)) { showMenu = false }
+                    }
+                    .transition(.opacity)
+
+                MenuDrawer(
+                    onDismiss: {
+                        withAnimation(.easeInOut(duration: 0.25)) { showMenu = false }
+                    },
+                    onLogOut: {
+                        withAnimation(.easeInOut(duration: 0.25)) { showMenu = false }
+                        Task { await AuthService.logOut() }
+                        onLogOut()
+                    }
+                )
+                .transition(.move(edge: .trailing))
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            CustomTabBar(selectedTab: $selectedTab, onPlus: { showCreate = true })
-        }
+        .animation(.easeInOut(duration: 0.25), value: showMenu)
         .sheet(isPresented: $showCreate) {
-            Text("Create") // TODO: create action sheet
+            Text("Create")
                 .presentationDetents([.medium])
         }
+    }
+}
+
+private struct MenuDrawer: View {
+    var onDismiss: () -> Void
+    var onLogOut: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.footnote.bold())
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .background(Color(.systemGray5), in: Circle())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 56)
+            .padding(.bottom, 16)
+
+            Spacer()
+
+            Button(action: onLogOut) {
+                HStack(spacing: 14) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .frame(width: 22)
+                    Text("Log Out")
+                    Spacer()
+                }
+                .foregroundStyle(.red)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 48)
+        }
+        .frame(width: UIScreen.main.bounds.width * 0.82)
+        .frame(maxHeight: .infinity)
+        .background(Color(.systemGroupedBackground))
+        .ignoresSafeArea()
     }
 }
 

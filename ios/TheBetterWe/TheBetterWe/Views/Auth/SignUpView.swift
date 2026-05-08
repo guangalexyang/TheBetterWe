@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SignUpView: View {
+    var onSuccess: () -> Void = {}
+
     @Environment(\.dismiss) private var dismiss
 
     @State private var username = ""
@@ -9,6 +11,7 @@ struct SignUpView: View {
     @State private var isPasswordVisible = false
     @State private var isConfirmVisible = false
     @State private var isLoading = false
+    @State private var errorMessage: String?
 
     private var hasLetter: Bool { PasswordValidator.hasLetter(password) }
     private var hasNumber: Bool { PasswordValidator.hasNumber(password) }
@@ -42,6 +45,7 @@ struct SignUpView: View {
                 TextField("Choose a username", text: $username)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .onChange(of: username) { errorMessage = nil }
             }
             .padding(.horizontal, AuthStyle.fieldHPadding)
             .padding(.vertical, AuthStyle.fieldVPadding)
@@ -112,12 +116,26 @@ struct SignUpView: View {
 
             Spacer().frame(height: AuthStyle.sectionSpacing)
 
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.bottom, 8)
+            }
+
             // Sign Up button
             Button {
                 isLoading = true
+                errorMessage = nil
                 Task {
-                    try? await Task.sleep(for: .seconds(2))
-                    // TODO: check username availability, call auth service
+                    do {
+                        try await AuthService.signUp(username: username, password: password)
+                        onSuccess()
+                    } catch let error as AuthError {
+                        errorMessage = error.errorDescription
+                    } catch {
+                        errorMessage = AuthError.network.errorDescription
+                    }
                     isLoading = false
                 }
             } label: {
