@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import db from '../db';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -60,7 +61,7 @@ router.post('/signup', async (req: Request, res: Response) => {
 
   insertRefreshToken(userId, familyId, refresh.hash, refresh.expiresAt);
 
-  res.status(201).json({ accessToken, refreshToken: refresh.raw });
+  res.status(201).json({ accessToken, refreshToken: refresh.raw, displayName: '' });
 });
 
 // POST /auth/login
@@ -73,12 +74,11 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 
   const user = db
-    .prepare('SELECT id, username, password_hash FROM users WHERE username = ?')
-    .get(username) as { id: number; username: string; password_hash: string } | undefined;
+    .prepare('SELECT id, username, password_hash, display_name FROM users WHERE username = ?')
+    .get(username) as { id: number; username: string; password_hash: string; display_name: string } | undefined;
 
   const match = user && (await bcrypt.compare(password, user.password_hash));
   if (!match) {
-    // Same error for unknown username and wrong password — no enumeration
     res.status(401).json({ error: 'invalid credentials' });
     return;
   }
@@ -89,7 +89,20 @@ router.post('/login', async (req: Request, res: Response) => {
 
   insertRefreshToken(user.id, familyId, refresh.hash, refresh.expiresAt);
 
-  res.json({ accessToken, refreshToken: refresh.raw });
+  res.json({ accessToken, refreshToken: refresh.raw, displayName: user.display_name });
+});
+
+// PUT /auth/display-name
+router.put('/display-name', requireAuth, (req: Request, res: Response) => {
+  const { displayName } = req.body as { displayName?: string };
+
+  if (!displayName || !displayName.trim()) {
+    res.status(400).json({ error: 'displayName is required' });
+    return;
+  }
+
+  db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(displayName.trim(), req.auth!.sub);
+  res.json({ displayName: displayName.trim() });
 });
 
 // POST /auth/refresh
@@ -106,14 +119,14 @@ router.post('/refresh', (req: Request, res: Response) => {
 
   const row = db
     .prepare(
-      `SELECT rt.id, rt.user_id, rt.family_id, rt.used, rt.expires_at, u.username
+      `SELECT rt.id, rt.user_id, rt.family_id, rt.used, rt.expires_at, u.username, u.display_name
        FROM refresh_tokens rt
        JOIN users u ON u.id = rt.user_id
        WHERE rt.token_hash = ?`
     )
     .get(hash) as {
       id: number; user_id: number; family_id: string;
-      used: number; expires_at: number; username: string;
+      used: number; expires_at: number; username: string; display_name: string;
     } | undefined;
 
   if (!row) {
@@ -122,7 +135,6 @@ router.post('/refresh', (req: Request, res: Response) => {
   }
 
   if (row.used) {
-    // Reuse detected — wipe the entire family to lock out any attacker
     db.prepare('DELETE FROM refresh_tokens WHERE family_id = ?').run(row.family_id);
     res.status(401).json({ error: 'refresh token reuse detected' });
     return;
@@ -134,7 +146,6 @@ router.post('/refresh', (req: Request, res: Response) => {
     return;
   }
 
-  // Mark current token as used, issue new pair in the same family
   db.prepare('UPDATE refresh_tokens SET used = 1 WHERE id = ?').run(row.id);
 
   const accessToken = makeAccessToken(row.user_id, row.username);
@@ -142,7 +153,7 @@ router.post('/refresh', (req: Request, res: Response) => {
 
   insertRefreshToken(row.user_id, row.family_id, newRefresh.hash, newRefresh.expiresAt);
 
-  res.json({ accessToken, refreshToken: newRefresh.raw });
+  res.json({ accessToken, refreshToken: newRefresh.raw, displayName: row.display_name });
 });
 
 // POST /auth/logout
@@ -156,7 +167,6 @@ router.post('/logout', (req: Request, res: Response) => {
       .get(hash) as { family_id: string } | undefined;
 
     if (row) {
-      // Wipe the whole family so all sessions from this login chain end
       db.prepare('DELETE FROM refresh_tokens WHERE family_id = ?').run(row.family_id);
     }
   }

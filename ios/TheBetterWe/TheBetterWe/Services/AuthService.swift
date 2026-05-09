@@ -15,32 +15,60 @@ enum AuthError: LocalizedError {
 }
 
 enum AuthService {
-    // Replace with real server URL for production.
-    private static let baseURL = URL(string: "http://localhost:3000")!
+    static let baseURL = URL(string: "http://localhost:3000")!
 
     private static let accessTokenKey  = "accessToken"
     private static let refreshTokenKey = "refreshToken"
+    private static let displayNameKey  = "displayName"
 
     static var isAuthenticated: Bool {
         KeychainService.load(forKey: accessTokenKey) != nil
     }
 
+    static var displayName: String? {
+        let name = KeychainService.load(forKey: displayNameKey)
+        return (name?.isEmpty == false) ? name : nil
+    }
+
     static func signUp(username: String, password: String) async throws {
-        let tokens = try await post(
+        let response = try await post(
             path: "/auth/signup",
             body: ["username": username, "password": password],
             expectedStatus: 201
         )
-        storeTokens(tokens)
+        storeResponse(response)
     }
 
     static func logIn(username: String, password: String) async throws {
-        let tokens = try await post(
+        let response = try await post(
             path: "/auth/login",
             body: ["username": username, "password": password],
             expectedStatus: 200
         )
-        storeTokens(tokens)
+        storeResponse(response)
+    }
+
+    static func updateDisplayName(_ name: String) async throws {
+        guard let token = KeychainService.load(forKey: accessTokenKey) else {
+            throw AuthError.network
+        }
+        var request = URLRequest(url: baseURL.appending(path: "/auth/display-name"))
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try? JSONEncoder().encode(["displayName": name])
+
+        let (_, response): (Data, URLResponse)
+        do {
+            (_, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw AuthError.network
+        }
+
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw AuthError.network }
+
+        KeychainService.save(name, forKey: displayNameKey)
     }
 
     static func logOut() async {
@@ -53,13 +81,15 @@ enum AuthService {
         }
         KeychainService.delete(forKey: accessTokenKey)
         KeychainService.delete(forKey: refreshTokenKey)
+        KeychainService.delete(forKey: displayNameKey)
     }
 
     // MARK: - Helpers
 
-    private struct TokenResponse: Decodable {
+    private struct AuthResponse: Decodable {
         let accessToken: String
         let refreshToken: String
+        let displayName: String
     }
 
     @discardableResult
@@ -67,7 +97,7 @@ enum AuthService {
         path: String,
         body: [String: String],
         expectedStatus: Int
-    ) async throws -> TokenResponse {
+    ) async throws -> AuthResponse {
         var request = URLRequest(url: baseURL.appending(path: path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -87,17 +117,18 @@ enum AuthService {
         if status != expectedStatus { throw AuthError.network }
 
         if expectedStatus == 204 {
-            return TokenResponse(accessToken: "", refreshToken: "")
+            return AuthResponse(accessToken: "", refreshToken: "", displayName: "")
         }
 
-        guard let tokens = try? JSONDecoder().decode(TokenResponse.self, from: data) else {
+        guard let decoded = try? JSONDecoder().decode(AuthResponse.self, from: data) else {
             throw AuthError.network
         }
-        return tokens
+        return decoded
     }
 
-    private static func storeTokens(_ tokens: TokenResponse) {
-        KeychainService.save(tokens.accessToken, forKey: accessTokenKey)
-        KeychainService.save(tokens.refreshToken, forKey: refreshTokenKey)
+    private static func storeResponse(_ response: AuthResponse) {
+        KeychainService.save(response.accessToken, forKey: accessTokenKey)
+        KeychainService.save(response.refreshToken, forKey: refreshTokenKey)
+        KeychainService.save(response.displayName, forKey: displayNameKey)
     }
 }

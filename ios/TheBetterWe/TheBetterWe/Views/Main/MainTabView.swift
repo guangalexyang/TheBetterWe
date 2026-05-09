@@ -19,7 +19,7 @@ struct MainTabView: View {
                 case .me: MeView(onMenuTap: {
                     withAnimation(.easeInOut(duration: 0.25)) { showMenu = true }
                 })
-                }
+            }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CustomTabBar(selectedTab: $selectedTab, onPlus: { showCreate = true })
