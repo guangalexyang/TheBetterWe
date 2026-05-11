@@ -13,6 +13,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL COLLATE NOCASE,
     password_hash TEXT NOT NULL,
+    display_name TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   );
 
