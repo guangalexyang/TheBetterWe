@@ -1,6 +1,6 @@
 # Family Setup Feature — Implementation Plan
 
-## Progress Snapshot (last updated: 2026-05-08)
+## Progress Snapshot (last updated: 2026-05-11)
 
 ### Completed
 - ✅ Server: `users.display_name` column added; DB wiped and recreated cleanly
@@ -11,17 +11,20 @@
 - ✅ iOS: `App/ContentView.swift` — `AppState` enum with `.needsDisplayName`, `.noFamily`, `.hasFamily`, `.offline`, `.loading`; hardcoded initial state
 - ✅ iOS: `Views/Profile/SetDisplayNameView.swift` — account-level display name prompt on first login; "Log Out" escape hatch
 - ✅ iOS: `Views/Family/Setup/NoFamilyView.swift` — shows `"{displayName},"` greeting, "Create a family" wired to CreateFamilyView, "Scan QR" TODO
-- ✅ iOS: `Views/Family/Setup/CreateFamilyView.swift` — family name field (default `"{name}'s Family"` / `"{name} 的家"`), role pill section (Dad/Mom/Child/Other + custom), `canContinue` logic; Continue button TODO (next step)
-- ✅ iOS: `Resources/Localizable.xcstrings` — all strings above translated to zh-Hans including role labels
+- ✅ iOS: `Views/Family/Setup/CreateFamilyView.swift` — family name field (default `"{name}'s Family"` / `"{name} 的家"`), role pill section (Dad/Mom/Child/Other + custom), `canContinue` logic; Continue wired to `ModuleSelectionView`
+- ✅ iOS: `Views/Family/Setup/ModuleSelectionView.swift` — "Customize Your Space" / "定制你的空间"; mandatory modules (Family TODO, Point System, Family Notes) as plain cards; optional module (OrderFromMe) with expandable feature list (3 bullets) + independent chevron/checkmark icons; `AppModule` enum with `isMandatory`, `title`, `description`, `icon`, `features`; Done button with TODO comments for server call and kid-role branching
+- ✅ iOS: `Resources/Localizable.xcstrings` — all strings translated to zh-Hans including all module titles, descriptions, and OrderFromMe feature bullets
 
 ### Design changes from original plan
 - **Account-level display name**: Added a first-login `SetDisplayNameView` step before `NoFamilyView`. This display name is stored in `users.display_name` (server) and Keychain (iOS). It is used as a default in per-family flows but can be customized per family.
 - **`FamilyMembership` has no `familyName`**: Fetch family name dynamically; `FamilyMembership` = `{familyId, memberId, displayName, roleKeywords}`.
-- **Role pills in CreateFamilyView**: The Dad/Mom/Child/Other role pills are on the same screen as the family name field. The selected role (or custom text) becomes the display name default passed to `RoleSelectionView`.
+- **Role pills in CreateFamilyView**: The Dad/Mom/Child/Other role pills are on the same screen as the family name field. The selected role passes through to `ModuleSelectionView`.
 - **No feature toggle**: Family setup has no `FeatureToggle` gate — build directly into production state machine.
+- **`ModuleSelectionView` replaces `RoleSelectionView`**: The keyword/service chip approach is dropped. Instead, users pick 板块 (modules/boards). Mandatory: Family TODO, Point System, Family Notes. Optional (toggleable): OrderFromMe. `ServiceKeywordRegistry`, `FlowLayout`, and `FamilySetupMode` are no longer needed for this step. `AppModule` enum lives in `ModuleSelectionView.swift`.
+- **Point System — kid role deferred**: `ModuleSelectionView` Done button has a `// TODO` comment for kid-role branching (kid = read-only). Not implemented yet.
 
 ### Next immediate step
-Wire the CreateFamilyView "Continue" button → push to `RoleSelectionView` (or handle display name + service keywords on the next screen). Build `RoleSelectionView.swift`.
+Build server DB tables + `POST /families` route, then wire `ModuleSelectionView` Done button to `FamilyService.createFamily()` and transition to `MainTabView`.
 
 ---
 
@@ -273,27 +276,26 @@ func makeQRImage(from string: String, size: CGFloat = 200) -> UIImage?
 
 Each step follows the pattern: **hardcode → see in simulator → wire to server → remove hardcode**.
 
-### Step 1 — Define data types + server DB
-- Add `Models/FamilyModels.swift` with the three structs.
-- Add DB tables to `server/src/db/index.ts`.
-- Restart server to apply schema.
+### Step 1 — Define data types + server DB ✅
+- `Models/FamilyModels.swift` with the three structs. ✅
+- DB tables to be added to `server/src/db/index.ts`. ← still pending
 
-### Step 2 — NoFamilyView (hardcoded)
-- Build `NoFamilyView.swift`.
-- In `ContentView`: `@State private var familyStatus: FamilyStatus = .noFamily` // HARDCODE
-- See the no-family screen immediately on launch after login.
+### Step 2 — NoFamilyView (hardcoded) ✅
+- `NoFamilyView.swift` built. ✅
+- `ContentView` hardcoded to `.noFamily` initial state. ✅
 
-### Step 3 — Create flow UI (hardcoded)
-- Build `FamilyStyle.swift`, `CreateFamilyView.swift`, `FlowLayout.swift`, `RoleSelectionView.swift`.
-- Hardcode: `onComplete` in RoleSelectionView calls back with a mock `FamilyMembership`.
-- Tap through the full create flow end-to-end in the simulator with fake data.
+### Step 3 — Create flow UI (hardcoded) ✅
+- `FamilyStyle.swift`, `CreateFamilyView.swift`, `ModuleSelectionView.swift` built. ✅
+- `FlowLayout.swift` and `RoleSelectionView.swift` dropped (module picker approach instead). ✅
+- Done button in `ModuleSelectionView` is still hardcoded (no server call yet).
 
-### Step 4 — Wire create flow to server
-- Build `FamilyService.fetchMine()` + `createFamily()`.
-- Build server `GET /families/mine` + `POST /families` routes.
+### Step 4 — Wire create flow to server ← NEXT
+- Add DB tables to `server/src/db/index.ts` (families, family_members).
+- Build `FamilyService.createFamily(name:role:modules:)`.
+- Build server `POST /families` + `GET /families/mine` routes.
 - Register `/families` in `server/src/index.ts`.
-- Wire `RoleSelectionView` to `FamilyService.createFamily` → remove hardcode.
-- Wire `ContentView.loadFamilies()` to `FamilyService.fetchMine()` → remove `familyStatus` hardcode.
+- Wire `ModuleSelectionView` Done button to `FamilyService.createFamily` → `onComplete`.
+- Wire `ContentView.loadFamilies()` to `FamilyService.fetchMine()` → remove hardcode.
 - curl test both routes.
 
 ### Step 5 — Join flow UI (hardcoded)
