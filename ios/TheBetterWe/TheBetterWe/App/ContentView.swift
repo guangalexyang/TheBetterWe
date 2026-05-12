@@ -10,16 +10,17 @@ enum AppState {
 
 struct ContentView: View {
     @State private var isAuthenticated = AuthService.isAuthenticated
-    @State private var appState: AppState = AuthService.displayName == nil ? .needsDisplayName : .noFamily // HARDCODE
+    @State private var appState: AppState = AuthService.displayName == nil ? .needsDisplayName : .loading
 
     var body: some View {
         if isAuthenticated {
             switch appState {
             case .loading:
                 ProgressView()
+                    .task { await loadFamilies() }
             case .needsDisplayName:
                 SetDisplayNameView(
-                    onComplete: { appState = .noFamily },
+                    onComplete: { appState = .loading },
                     onLogOut: { isAuthenticated = false; appState = .needsDisplayName }
                 )
             case .noFamily:
@@ -27,22 +28,41 @@ struct ContentView: View {
                     displayName: AuthService.displayName,
                     onComplete: { memberships in appState = .hasFamily(memberships) }
                 )
-            case .hasFamily:
-                MainTabView(onLogOut: {
-                    isAuthenticated = false
-                    appState = .noFamily // HARDCODE
-                })
+            case .hasFamily(let memberships):
+                MainTabView(
+                    membership: memberships[0],
+                    onLogOut: {
+                        isAuthenticated = false
+                        appState = .needsDisplayName
+                    },
+                    onFamilyDeleted: { appState = .noFamily }
+                )
             case .offline:
-                MainTabView(onLogOut: {
-                    isAuthenticated = false
-                    appState = .noFamily // HARDCODE
-                })
+                MainTabView(
+                    membership: FamilyMembership(familyId: 0, familyName: "", memberId: 0, displayName: "", roleKeywords: []),
+                    onLogOut: {
+                        isAuthenticated = false
+                        appState = .needsDisplayName
+                    }
+                )
             }
         } else {
             LoginView(onSuccess: {
                 isAuthenticated = true
-                appState = AuthService.displayName == nil ? .needsDisplayName : .noFamily // HARDCODE
+                appState = AuthService.displayName == nil ? .needsDisplayName : .loading
             })
+        }
+    }
+
+    private func loadFamilies() async {
+        do {
+            let memberships = try await FamilyService.fetchMine()
+            appState = memberships.isEmpty ? .noFamily : .hasFamily(memberships)
+        } catch FamilyError.unauthorized {
+            isAuthenticated = false
+            appState = .needsDisplayName
+        } catch {
+            appState = .offline
         }
     }
 }
