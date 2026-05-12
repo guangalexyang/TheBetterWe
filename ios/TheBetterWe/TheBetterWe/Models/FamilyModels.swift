@@ -2,6 +2,7 @@ import Foundation
 
 struct FamilyMembership: Codable {
     let familyId: Int
+    let familyName: String
     let memberId: Int
     let displayName: String
     let roleKeywords: [String]

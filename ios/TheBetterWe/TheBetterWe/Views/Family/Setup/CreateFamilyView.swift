@@ -11,6 +11,15 @@ enum FamilyRole: Hashable {
         case .other: return "Other"
         }
     }
+
+    var rawLabel: String {
+        switch self {
+        case .dad:   return String(localized: "Dad")
+        case .mom:   return String(localized: "Mom")
+        case .child: return String(localized: "Child")
+        case .other: return String(localized: "Other")
+        }
+    }
 }
 
 struct CreateFamilyView: View {

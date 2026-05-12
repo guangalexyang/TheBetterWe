@@ -25,6 +25,10 @@ enum AuthService {
         KeychainService.load(forKey: accessTokenKey) != nil
     }
 
+    static var accessToken: String? {
+        KeychainService.load(forKey: accessTokenKey)
+    }
+
     static var displayName: String? {
         let name = KeychainService.load(forKey: displayNameKey)
         return (name?.isEmpty == false) ? name : nil

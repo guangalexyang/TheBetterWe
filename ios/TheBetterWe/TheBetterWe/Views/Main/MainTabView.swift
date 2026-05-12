@@ -5,7 +5,9 @@ enum AppTab {
 }
 
 struct MainTabView: View {
+    var membership: FamilyMembership
     var onLogOut: () -> Void = {}
+    var onFamilyDeleted: () -> Void = {}
 
     @State private var selectedTab: AppTab = .family
     @State private var showCreate = false
@@ -15,7 +17,7 @@ struct MainTabView: View {
         ZStack(alignment: .trailing) {
             Group {
                 switch selectedTab {
-                case .family: FamilyView()
+                case .family: FamilyView(membership: membership, onDeleted: onFamilyDeleted)
                 case .me: MeView(onMenuTap: {
                     withAnimation(.easeInOut(duration: 0.25)) { showMenu = true }
                 })
@@ -149,5 +151,8 @@ private struct CustomTabBar: View {
 }
 
 #Preview {
-    MainTabView()
+    MainTabView(membership: FamilyMembership(
+        familyId: 1, familyName: "The Yangs", memberId: 1,
+        displayName: "Dad", roleKeywords: ["familyTodo", "pointSystem", "familyNotes"]
+    ))
 }

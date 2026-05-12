@@ -68,6 +68,8 @@ struct ModuleSelectionView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var enabledOptionals:  Set<AppModule> = []
     @State private var expandedOptionals: Set<AppModule> = []
+    @State private var isLoading = false
+    @State private var errorMessage: String? = nil
 
     private var mandatoryModules: [AppModule] { AppModule.allCases.filter { $0.isMandatory } }
     private var optionalModules:  [AppModule] { AppModule.allCases.filter { !$0.isMandatory } }
@@ -116,23 +118,55 @@ struct ModuleSelectionView: View {
             }
 
             Button {
-                // TODO: kid role — parent can view/edit kids' points; kid can only view. Handle role branching here.
-                // TODO: call FamilyService.createFamily(name: familyName, role: role, modules: enabledModules)
+                isLoading = true
+                let memberDisplayName = role == .other
+                    ? (customRole.trimmingCharacters(in: .whitespaces).isEmpty ? role.rawLabel : customRole.trimmingCharacters(in: .whitespaces))
+                    : role.rawLabel
+                let mandatoryIds = AppModule.allCases.filter { $0.isMandatory }.map { $0.rawValue }
+                let optionalIds  = enabledOptionals.map { $0.rawValue }
+                // TODO: kid role — parent can view/edit kids' points; kid can only view. Handle role branching before this call.
+                Task {
+                    do {
+                        let membership = try await FamilyService.createFamily(
+                            name: familyName,
+                            displayName: memberDisplayName,
+                            modules: mandatoryIds + optionalIds
+                        )
+                        onComplete([membership])
+                    } catch {
+                        errorMessage = error.localizedDescription
+                        isLoading = false
+                    }
+                }
             } label: {
-                Text("Done")
-                    .font(.body.bold())
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, AuthStyle.buttonVPadding)
-                    .background(Color.primary)
-                    .foregroundStyle(Color(UIColor.systemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
+                Group {
+                    if isLoading {
+                        ProgressView().tint(Color(UIColor.systemBackground))
+                    } else {
+                        Text("Done").font(.body.bold())
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, AuthStyle.buttonVPadding)
+                .background(Color.primary)
+                .foregroundStyle(Color(UIColor.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
             }
+            .disabled(isLoading)
             .padding(.horizontal, AuthStyle.screenHPadding)
             .padding(.top, 16)
             .padding(.bottom, 48)
         }
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
+        .alert("Error", isPresented: .init(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     @ViewBuilder

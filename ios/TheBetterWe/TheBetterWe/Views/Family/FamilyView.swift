@@ -1,33 +1,81 @@
 import SwiftUI
 
 struct FamilyView: View {
+    var membership: FamilyMembership
+    var onDeleted: () -> Void = {}
+
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var errorMessage: String? = nil
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                Spacer()
-
-                // Replace with Image("AppLogo") when logo asset is added
-                ZStack {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.red.opacity(0.1))
-                        .frame(width: 80, height: 80)
-                    Image(systemName: "house.heart.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.red)
+            List {
+                Section("Family") {
+                    LabeledContent("Name", value: membership.familyName)
+                    LabeledContent("ID", value: "\(membership.familyId)")
                 }
 
-                Text("Home")
-                    .font(.title2.bold())
-                Text("Coming soon")
-                    .foregroundStyle(.secondary)
+                Section("My Info") {
+                    LabeledContent("Display Name", value: membership.displayName)
+                    LabeledContent("Member ID", value: "\(membership.memberId)")
+                }
 
-                Spacer()
+                Section("Modules") {
+                    ForEach(membership.roleKeywords, id: \.self) { keyword in
+                        Text(keyword)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        HStack {
+                            Text("Delete Family")
+                            Spacer()
+                            if isDeleting { ProgressView() }
+                        }
+                    }
+                    .disabled(isDeleting)
+                }
             }
+            .navigationTitle("Home")
             .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog("Delete \"\(membership.familyName)\"?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete Family", role: .destructive) {
+                    isDeleting = true
+                    Task {
+                        do {
+                            try await FamilyService.deleteFamily(id: membership.familyId)
+                            onDeleted()
+                        } catch {
+                            errorMessage = error.localizedDescription
+                            isDeleting = false
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .alert("Error", isPresented: .init(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
         }
     }
 }
 
 #Preview {
-    FamilyView()
+    FamilyView(membership: FamilyMembership(
+        familyId: 1,
+        familyName: "The Yangs",
+        memberId: 1,
+        displayName: "Dad",
+        roleKeywords: ["familyTodo", "pointSystem", "familyNotes", "orderFromMe"]
+    ))
 }

@@ -1,6 +1,6 @@
 # Family Setup Feature — Implementation Plan
 
-## Progress Snapshot (last updated: 2026-05-11)
+## Progress Snapshot (last updated: 2026-05-12)
 
 ### Completed
 - ✅ Server: `users.display_name` column added; DB wiped and recreated cleanly
@@ -12,8 +12,17 @@
 - ✅ iOS: `Views/Profile/SetDisplayNameView.swift` — account-level display name prompt on first login; "Log Out" escape hatch
 - ✅ iOS: `Views/Family/Setup/NoFamilyView.swift` — shows `"{displayName},"` greeting, "Create a family" wired to CreateFamilyView, "Scan QR" TODO
 - ✅ iOS: `Views/Family/Setup/CreateFamilyView.swift` — family name field (default `"{name}'s Family"` / `"{name} 的家"`), role pill section (Dad/Mom/Child/Other + custom), `canContinue` logic; Continue wired to `ModuleSelectionView`
-- ✅ iOS: `Views/Family/Setup/ModuleSelectionView.swift` — "Customize Your Space" / "定制你的空间"; mandatory modules (Family TODO, Point System, Family Notes) as plain cards; optional module (OrderFromMe) with expandable feature list (3 bullets) + independent chevron/checkmark icons; `AppModule` enum with `isMandatory`, `title`, `description`, `icon`, `features`; Done button with TODO comments for server call and kid-role branching
+- ✅ iOS: `Views/Family/Setup/ModuleSelectionView.swift` — "Customize Your Space" / "定制你的空间"; mandatory modules (Family TODO, Point System, Family Notes) as plain cards; optional module (OrderFromMe) with expandable feature list (3 bullets) + independent chevron/checkmark icons; `AppModule` enum with `isMandatory`, `title`, `description`, `icon`, `features`; Done button wired to `FamilyService.createFamily`, shows `ProgressView` while loading, shows alert on error
 - ✅ iOS: `Resources/Localizable.xcstrings` — all strings translated to zh-Hans including all module titles, descriptions, and OrderFromMe feature bullets
+- ✅ Server: `db/index.ts` — `families`, `family_members`, `member_role_keywords` tables + indexes
+- ✅ Server: `routes/families.ts` — `GET /families/mine` (returns membership array with `familyName`), `POST /families` (transactional insert of family + member + keywords), `DELETE /families/:id` (member-verified delete, cascades)
+- ✅ Server: `index.ts` — registered `/families`
+- ✅ iOS: `Services/AuthService.swift` — added `static var accessToken: String?`
+- ✅ iOS: `Services/FamilyService.swift` — `fetchMine()`, `createFamily(name:displayName:modules:)`, `deleteFamily(id:)` with full error handling
+- ✅ iOS: `Models/FamilyModels.swift` — `familyName` added to `FamilyMembership`
+- ✅ iOS: `Views/Family/FamilyView.swift` — displays family info as a List (Family / My Info / Modules sections); "Delete Family" row with confirmation dialog; wired to `FamilyService.deleteFamily`
+- ✅ iOS: `Views/Main/MainTabView.swift` — accepts `membership: FamilyMembership` + `onFamilyDeleted`; passes to `FamilyView`
+- ✅ iOS: `App/ContentView.swift` — removed all hardcodes; starts in `.loading`, calls `loadFamilies()` via `.task`; routes to `.noFamily` / `.hasFamily` / `.offline`; passes `memberships[0]` and `onFamilyDeleted` → `.noFamily` to `MainTabView`
 
 ### Design changes from original plan
 - **Account-level display name**: Added a first-login `SetDisplayNameView` step before `NoFamilyView`. This display name is stored in `users.display_name` (server) and Keychain (iOS). It is used as a default in per-family flows but can be customized per family.
@@ -24,7 +33,7 @@
 - **Point System — kid role deferred**: `ModuleSelectionView` Done button has a `// TODO` comment for kid-role branching (kid = read-only). Not implemented yet.
 
 ### Next immediate step
-Build server DB tables + `POST /families` route, then wire `ModuleSelectionView` Done button to `FamilyService.createFamily()` and transition to `MainTabView`.
+Step 5 — Join flow: `QRScannerView`, `JoinFamilyView`, server `GET /families/by-invite/:code` + `POST /families/:id/join`.
 
 ---
 
@@ -289,7 +298,7 @@ Each step follows the pattern: **hardcode → see in simulator → wire to serve
 - `FlowLayout.swift` and `RoleSelectionView.swift` dropped (module picker approach instead). ✅
 - Done button in `ModuleSelectionView` is still hardcoded (no server call yet).
 
-### Step 4 — Wire create flow to server ← NEXT
+### Step 4 — Wire create flow to server ✅
 - Add DB tables to `server/src/db/index.ts` (families, family_members).
 - Build `FamilyService.createFamily(name:role:modules:)`.
 - Build server `POST /families` + `GET /families/mine` routes.
