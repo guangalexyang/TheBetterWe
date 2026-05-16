@@ -95,9 +95,7 @@ struct FamilyView: View {
     private var tabContent: some View {
         switch selectedTab {
         case .dashboard:
-            Text("TODO: Dashboard")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            DashboardView(membership: membership)
         case .module(let m):
             Text("TODO: \(m.rawValue)")
                 .foregroundStyle(.secondary)
