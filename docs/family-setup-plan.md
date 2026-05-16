@@ -1,6 +1,6 @@
 # Family Setup Feature — Implementation Plan
 
-## Progress Snapshot (last updated: 2026-05-12)
+## Progress Snapshot (last updated: 2026-05-15)
 
 ### Completed
 - ✅ Server: `users.display_name` column added; DB wiped and recreated cleanly
@@ -20,17 +20,22 @@
 - ✅ iOS: `Services/AuthService.swift` — added `static var accessToken: String?`
 - ✅ iOS: `Services/FamilyService.swift` — `fetchMine()`, `createFamily(name:displayName:modules:)`, `deleteFamily(id:)` with full error handling
 - ✅ iOS: `Models/FamilyModels.swift` — `familyName` added to `FamilyMembership`
-- ✅ iOS: `Views/Family/FamilyView.swift` — displays family info as a List (Family / My Info / Modules sections); "Delete Family" row with confirmation dialog; wired to `FamilyService.deleteFamily`
 - ✅ iOS: `Views/Main/MainTabView.swift` — accepts `membership: FamilyMembership` + `onFamilyDeleted`; passes to `FamilyView`
 - ✅ iOS: `App/ContentView.swift` — removed all hardcodes; starts in `.loading`, calls `loadFamilies()` via `.task`; routes to `.noFamily` / `.hasFamily` / `.offline`; passes `memberships[0]` and `onFamilyDeleted` → `.noFamily` to `MainTabView`
+- ✅ iOS: `Models/AppModule.swift` — `AppModule` enum + `ModuleFeature` extracted from `ModuleSelectionView` into shared Models file
+- ✅ iOS: `Views/Family/FamilyView.swift` — full redesign: Douyin-style top bar (≡ + scrollable module tabs with capsule underline), tab content area, left drawer sliding from leading edge with iOS settings-style list (Family section: family name row + Invite row + Edit row), delete moved to future edit view; `FamilyTab` enum (`.dashboard` / `.module(AppModule)`); tabs computed from `membership.roleKeywords`; localization fixed via `LocalizedStringKey` overload + `verbatimRow` for dynamic strings; "Invite"/"Edit"/"Family" zh-Hans added with `extractionState: manual`
+- ✅ iOS: `Views/Family/DashboardView.swift` — widget-based dashboard (主页): full-width cards per active module (Family TODO / Family Notes / Point System / OrderFromMe if enabled), colored headers (indigo / amber / orange / teal), long-press to drag reorder with haptic feedback, widget order persisted per-family in `UserDefaults`; "Coming soon" placeholder body in each card
 
 ### Design changes from original plan
 - **Account-level display name**: Added a first-login `SetDisplayNameView` step before `NoFamilyView`. This display name is stored in `users.display_name` (server) and Keychain (iOS). It is used as a default in per-family flows but can be customized per family.
-- **`FamilyMembership` has no `familyName`**: Fetch family name dynamically; `FamilyMembership` = `{familyId, memberId, displayName, roleKeywords}`.
+- **`FamilyMembership` has `familyName`**: Server JOIN returns `familyName` in `GET /families/mine` and `POST /families`. Stored in model.
 - **Role pills in CreateFamilyView**: The Dad/Mom/Child/Other role pills are on the same screen as the family name field. The selected role passes through to `ModuleSelectionView`.
 - **No feature toggle**: Family setup has no `FeatureToggle` gate — build directly into production state machine.
-- **`ModuleSelectionView` replaces `RoleSelectionView`**: The keyword/service chip approach is dropped. Instead, users pick 板块 (modules/boards). Mandatory: Family TODO, Point System, Family Notes. Optional (toggleable): OrderFromMe. `ServiceKeywordRegistry`, `FlowLayout`, and `FamilySetupMode` are no longer needed for this step. `AppModule` enum lives in `ModuleSelectionView.swift`.
+- **`ModuleSelectionView` replaces `RoleSelectionView`**: The keyword/service chip approach is dropped. Instead, users pick 板块 (modules/boards). Mandatory: Family TODO, Point System, Family Notes. Optional (toggleable): OrderFromMe. `ServiceKeywordRegistry`, `FlowLayout`, and `FamilySetupMode` are no longer needed for this step.
+- **`AppModule` moved to `Models/AppModule.swift`**: Shared between `ModuleSelectionView` and `FamilyView`.
+- **Delete moved to edit view**: Delete family action removed from left drawer; will live in the future family edit view.
 - **Point System — kid role deferred**: `ModuleSelectionView` Done button has a `// TODO` comment for kid-role branching (kid = read-only). Not implemented yet.
+- **Dashboard is widget-based, not tab content**: Originally planned as a simple placeholder; now a full `DashboardView` with draggable module widget cards and per-family order persistence.
 
 ### Next immediate step
 Step 5 — Join flow: `QRScannerView`, `JoinFamilyView`, server `GET /families/by-invite/:code` + `POST /families/:id/join`.
