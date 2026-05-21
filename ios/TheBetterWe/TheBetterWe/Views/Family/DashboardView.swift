@@ -42,8 +42,8 @@ struct DashboardView: View {
         .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
         .onAppear { loadWidgetOrder() }
         .onChange(of: widgetOrder) { _, _ in saveWidgetOrder() }
-        .sheet(isPresented: $showAddChild) {
-            AddChildSheet { mockChildren.append($0) }
+        .navigationDestination(isPresented: $showAddChild) {
+            AddChildView { mockChildren.append($0) }
         }
     }
 
