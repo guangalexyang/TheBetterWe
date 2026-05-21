@@ -14,6 +14,7 @@ struct MainTabView: View {
     @State private var showMenu = false
 
     var body: some View {
+        NavigationStack {
         ZStack(alignment: .trailing) {
             Group {
                 switch selectedTab {
@@ -53,6 +54,8 @@ struct MainTabView: View {
             Text("Create")
                 .presentationDetents([.medium])
         }
+        .toolbar(.hidden, for: .navigationBar)
+        } // NavigationStack
     }
 }
 

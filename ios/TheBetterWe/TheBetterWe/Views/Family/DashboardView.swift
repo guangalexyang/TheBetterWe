@@ -9,25 +9,31 @@ struct DashboardView: View {
     @State private var draggingItem: AppModule? = nil
     @State private var dragOffset: CGSize = .zero
     @State private var cardFrames: [AppModule: CGRect] = [:]
+    @State private var mockChildren: [PSChild] = []
+    @State private var showAddChild = false
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(widgetOrder, id: \.self) { module in
-                    WidgetCard(module: module)
-                        .scaleEffect(draggingItem == module ? 1.03 : 1.0)
-                        .opacity(draggingItem == module ? 0.85 : 1.0)
-                        .zIndex(draggingItem == module ? 1 : 0)
-                        .offset(draggingItem == module ? dragOffset : .zero)
-                        .gesture(longPressThenDrag(for: module))
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear.preference(
-                                    key: DashboardFramePreference.self,
-                                    value: [module: geo.frame(in: .named("dashboard"))]
-                                )
-                            }
-                        )
+                    WidgetCard(
+                        module: module,
+                        children: mockChildren,
+                        onAddChild: module == .pointSystem ? { showAddChild = true } : nil
+                    )
+                    .scaleEffect(draggingItem == module ? 1.03 : 1.0)
+                    .opacity(draggingItem == module ? 0.85 : 1.0)
+                    .zIndex(draggingItem == module ? 1 : 0)
+                    .offset(draggingItem == module ? dragOffset : .zero)
+                    .gesture(longPressThenDrag(for: module))
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: DashboardFramePreference.self,
+                                value: [module: geo.frame(in: .named("dashboard"))]
+                            )
+                        }
+                    )
                 }
             }
             .padding(16)
@@ -36,6 +42,9 @@ struct DashboardView: View {
         .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
         .onAppear { loadWidgetOrder() }
         .onChange(of: widgetOrder) { _, _ in saveWidgetOrder() }
+        .navigationDestination(isPresented: $showAddChild) {
+            AddChildView { mockChildren.append($0) }
+        }
     }
 
     // MARK: - Gesture
@@ -100,6 +109,8 @@ struct DashboardView: View {
 
 private struct WidgetCard: View {
     let module: AppModule
+    var children: [PSChild] = []
+    var onAddChild: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -115,6 +126,21 @@ private struct WidgetCard: View {
             .frame(height: 48)
             .background(module.widgetHeaderColor)
 
+            cardBody
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+    }
+
+    @ViewBuilder
+    private var cardBody: some View {
+        if module == .pointSystem {
+            if children.isEmpty {
+                PointSystemEmptyState(onAddChild: onAddChild ?? {})
+            } else {
+                PointSystemChildrenList(children: children, onAddChild: onAddChild ?? {})
+            }
+        } else {
             Text("Coming soon")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -122,8 +148,91 @@ private struct WidgetCard: View {
                 .padding(.vertical, 32)
                 .background(Color(.systemBackground))
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+    }
+}
+
+// MARK: - Point System Widget Content
+
+private struct PointSystemEmptyState: View {
+    let onAddChild: () -> Void
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 30))
+                .foregroundStyle(.orange)
+
+            Text("Track points for your kids")
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+
+            Text("Add a child to get started")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button(action: onAddChild) {
+                Label("Add Child", systemImage: "person.badge.plus")
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.orange)
+            .padding(.top, 6)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+        .background(Color(.systemBackground))
+    }
+}
+
+private struct PointSystemChildrenList: View {
+    let children: [PSChild]
+    let onAddChild: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(children) { child in
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(.orange.opacity(0.15))
+                        Text(verbatim: String(child.name.prefix(1)).uppercased())
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.orange)
+                    }
+                    .frame(width: 36, height: 36)
+
+                    Text(verbatim: child.name)
+                        .font(.system(size: 15))
+
+                    Spacer()
+
+                    Text("\(child.balance) pts")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+
+                Divider().padding(.leading, 64)
+            }
+
+            Button(action: onAddChild) {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.badge.plus")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.orange)
+                        .frame(width: 36, height: 36)
+                    Text("Add Child")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .background(Color(.systemBackground))
     }
 }
 
