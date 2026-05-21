@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **TheBetterWe** is a family daily-routine iOS app. It is the hub that integrates smaller family tools (OrderFromMe, RewardMe, and future tools) into one place, alongside its own core features.
 
-The app serves parents managing family life. Children do not have accounts — parents create child roles within the family.
+The app serves parents managing family life. Children may have their own accounts (with a `"child"` role keyword in the family), or parents can create profile-only child roles (`user_id = NULL`) for young kids who don't log in.
 
 ## Core Features
 
@@ -121,9 +121,9 @@ Build UI **view by view** — never scaffold multiple views at once without user
 
 ## Development Phases
 
-1. **Phase 1 (current)** — iOS app + local Node/Express server + PostgreSQL; user auth, family setup, personal + family TODOs/Done, Highlight of the Day
+1. **Phase 1 (current)** — iOS app + local Node/Express server + PostgreSQL; user auth, family setup, Point System (kids + rules + points + redemptions), personal + family TODOs/Done, Highlight of the Day
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
-3. **Phase 3** — RewardMe integration
+3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
 4. **Phase 4** — Siri / App Intents; Doubao API
 5. **Phase 5** — Apple Watch companion
 6. **Phase 6** — Migrate backend to fly.io (or chosen host)

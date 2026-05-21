@@ -1,11 +1,11 @@
 # Family Setup Feature — Implementation Plan
 
-## Progress Snapshot (last updated: 2026-05-15)
+## Progress Snapshot (last updated: 2026-05-20)
 
 ### Completed
 - ✅ Server: `users.display_name` column added; DB wiped and recreated cleanly
 - ✅ Server: `auth.ts` — signup/login/refresh return `{ accessToken, refreshToken, displayName }`; `PUT /auth/display-name` route added
-- ✅ iOS: `Models/FamilyModels.swift` — `FamilyMembership` (no `familyName`), `FamilyPreview`, `FamilyInvite`
+- ✅ iOS: `Models/FamilyModels.swift` — `FamilyMembership` (with `familyName`), `FamilyPreview`, `FamilyInvite`
 - ✅ iOS: `Services/AuthService.swift` — `displayName` Keychain key, `updateDisplayName()`, `displayName` returned from all auth responses, cleared on `logOut()`
 - ✅ iOS: `Views/Family/FamilyStyle.swift` — all style constants
 - ✅ iOS: `App/ContentView.swift` — `AppState` enum with `.needsDisplayName`, `.noFamily`, `.hasFamily`, `.offline`, `.loading`; hardcoded initial state
@@ -24,7 +24,12 @@
 - ✅ iOS: `App/ContentView.swift` — removed all hardcodes; starts in `.loading`, calls `loadFamilies()` via `.task`; routes to `.noFamily` / `.hasFamily` / `.offline`; passes `memberships[0]` and `onFamilyDeleted` → `.noFamily` to `MainTabView`
 - ✅ iOS: `Models/AppModule.swift` — `AppModule` enum + `ModuleFeature` extracted from `ModuleSelectionView` into shared Models file
 - ✅ iOS: `Views/Family/FamilyView.swift` — full redesign: Douyin-style top bar (≡ + scrollable module tabs with capsule underline), tab content area, left drawer sliding from leading edge with iOS settings-style list (Family section: family name row + Invite row + Edit row), delete moved to future edit view; `FamilyTab` enum (`.dashboard` / `.module(AppModule)`); tabs computed from `membership.roleKeywords`; localization fixed via `LocalizedStringKey` overload + `verbatimRow` for dynamic strings; "Invite"/"Edit"/"Family" zh-Hans added with `extractionState: manual`
-- ✅ iOS: `Views/Family/DashboardView.swift` — widget-based dashboard (主页): full-width cards per active module (Family TODO / Family Notes / Point System / OrderFromMe if enabled), colored headers (indigo / amber / orange / teal), long-press to drag reorder with haptic feedback, widget order persisted per-family in `UserDefaults`; "Coming soon" placeholder body in each card
+- ✅ iOS: `Views/Family/DashboardView.swift` — widget-based dashboard (主页): full-width cards per active module (Family TODO / Family Notes / Point System / OrderFromMe if enabled), colored headers (indigo / amber / orange / teal), long-press to drag reorder with haptic feedback, widget order persisted per-family in `UserDefaults`; Point System card shows live empty state (star + text + baby-head icon button) and children list once kids are added; all other cards show "Coming soon"
+- ✅ iOS: `Models/PointSystemModels.swift` — `PSChild` struct (id, name, balance); mocked locally, server not yet wired
+- ✅ iOS: `Views/Family/PointSystem/AddChildSheet.swift` — `.medium` sheet, name TextField, "Add" disabled until non-empty; creates mock `PSChild` on confirm
+
+### In Progress
+- 🔄 **Point System Phase C (mocked UI)** — AwardPointsSheet, RulesView + AddRuleSheet, RedeemSheet still to build; Point System tab in `FamilyView.tabContent` still shows `Text("TODO: pointSystem")`
 
 ### Design changes from original plan
 - **Account-level display name**: Added a first-login `SetDisplayNameView` step before `NoFamilyView`. This display name is stored in `users.display_name` (server) and Keychain (iOS). It is used as a default in per-family flows but can be customized per family.
@@ -38,7 +43,9 @@
 - **Dashboard is widget-based, not tab content**: Originally planned as a simple placeholder; now a full `DashboardView` with draggable module widget cards and per-family order persistence.
 
 ### Next immediate step
-Step 5 — Join flow: `QRScannerView`, `JoinFamilyView`, server `GET /families/by-invite/:code` + `POST /families/:id/join`.
+**Point System Phase C (mocked UI)** — remaining views: `AwardPointsSheet`, `RulesView` + `AddRuleSheet`, `RedeemSheet`; then wire Point System tab in `FamilyView`. Server and service layer (Phase A + B) come after UI is approved.
+
+Step 5 (Join flow) — `QRScannerView`, `JoinFamilyView`, server `GET /families/by-invite/:code` + `POST /families/:id/join` — deferred until Point System Phase C is complete.
 
 ---
 
@@ -123,9 +130,9 @@ Register in `server/src/index.ts` as `app.use('/families', families)`.
 
 `FamilyMembership` response shape:
 ```json
-{ "familyId": 1, "memberId": 7, "displayName": "Dad", "roleKeywords": ["parent", "chef"] }
+{ "familyId": 1, "familyName": "The Yangs", "memberId": 7, "displayName": "Dad", "roleKeywords": ["parent", "chef"] }
 ```
-(No `familyName` — fetch via `GET /families/:id` or `GET /families/mine` with a join if needed.)
+(`familyName` is included via JOIN in `GET /families/mine` and `POST /families`. iOS model has `familyName`.)
 
 ---
 
