@@ -19,9 +19,10 @@ struct MainTabView: View {
             Group {
                 switch selectedTab {
                 case .family: FamilyView(membership: membership, onDeleted: onFamilyDeleted)
-                case .me: MeView(onMenuTap: {
-                    withAnimation(.easeInOut(duration: 0.25)) { showMenu = true }
-                })
+                case .me: MeView(
+                    onMenuTap: { withAnimation(.easeInOut(duration: 0.25)) { showMenu = true } },
+                    onLogOut: onLogOut
+                )
             }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {

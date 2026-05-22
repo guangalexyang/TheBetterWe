@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AddChildView: View {
+    let familyId: Int
     let onAdd: (PSChild) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -9,6 +10,8 @@ struct AddChildView: View {
     @State private var hasBirthday = false
     @State private var showDatePicker = false
     @State private var name = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String? = nil
 
     private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
 
@@ -17,6 +20,12 @@ struct AddChildView: View {
             ? birthday.formatted(date: .long, time: .omitted)
             : String(localized: "Select birthday")
     }
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withFullDate]
+        return f
+    }()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -103,26 +112,35 @@ struct AddChildView: View {
                 .padding(.bottom, 24)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                Button {
-                    onAdd(PSChild(
-                        id: Int.random(in: 1000...9999),
-                        name: trimmed,
-                        gender: selectedGender,
-                        birthday: hasBirthday ? birthday : nil,
-                        balance: 0
-                    ))
-                    dismiss()
-                } label: {
-                    Text("Add Child")
-                        .font(.body.bold())
+                VStack(spacing: 8) {
+                    if let msg = errorMessage {
+                        Text(msg)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, AuthStyle.screenHPadding)
+                    }
+
+                    Button {
+                        submitAddChild()
+                    } label: {
+                        Group {
+                            if isLoading {
+                                ProgressView().tint(Color(UIColor.systemBackground))
+                            } else {
+                                Text("Add Child")
+                                    .font(.body.bold())
+                            }
+                        }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, AuthStyle.buttonVPadding)
-                        .background(trimmed.isEmpty ? Color.primary.opacity(0.3) : Color.primary)
+                        .background(trimmed.isEmpty || isLoading ? Color.primary.opacity(0.3) : Color.primary)
                         .foregroundStyle(Color(UIColor.systemBackground))
                         .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
+                    }
+                    .disabled(trimmed.isEmpty || isLoading)
+                    .padding(.horizontal, AuthStyle.screenHPadding)
                 }
-                .disabled(trimmed.isEmpty)
-                .padding(.horizontal, AuthStyle.screenHPadding)
                 .padding(.top, 16)
                 .padding(.bottom, 32)
                 .background(Color(.systemBackground))
@@ -131,6 +149,27 @@ struct AddChildView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+    }
+
+    private func submitAddChild() {
+        isLoading = true
+        errorMessage = nil
+        let birthdayStr = hasBirthday ? Self.isoFormatter.string(from: birthday) : nil
+        Task {
+            do {
+                let child = try await PointSystemService.addChild(
+                    familyId: familyId,
+                    name: trimmed,
+                    gender: selectedGender,
+                    birthday: birthdayStr
+                )
+                onAdd(child)
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                isLoading = false
+            }
+        }
     }
 }
 
@@ -175,10 +214,10 @@ private struct GenderCircle: View {
 }
 
 #Preview {
-    NavigationStack { AddChildView { _ in } }
+    NavigationStack { AddChildView(familyId: 1) { _ in } }
 }
 
 #Preview("中文") {
-    NavigationStack { AddChildView { _ in } }
+    NavigationStack { AddChildView(familyId: 1) { _ in } }
         .environment(\.locale, .init(identifier: "zh-Hans"))
 }

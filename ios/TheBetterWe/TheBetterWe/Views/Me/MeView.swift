@@ -2,20 +2,20 @@ import SwiftUI
 
 struct MeView: View {
     var onMenuTap: () -> Void = {}
+    var onLogOut: () -> Void = {}
 
     var body: some View {
-        NavigationStack {
+        VStack {
             ContentUnavailableView("Me", systemImage: "person", description: Text("Coming soon"))
-                .navigationTitle("Me")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button(action: onMenuTap) {
-                            Image(systemName: "line.3.horizontal")
-                                .foregroundStyle(.primary)
-                        }
-                    }
+
+            Button("Log Out") {
+                Task {
+                    await AuthService.logOut()
+                    onLogOut()
                 }
+            }
+            .foregroundStyle(.red)
+            .padding(.bottom, 32)
         }
     }
 }
