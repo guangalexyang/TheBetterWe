@@ -97,9 +97,14 @@ struct FamilyView: View {
         case .dashboard:
             DashboardView(membership: membership)
         case .module(let m):
-            Text("TODO: \(m.rawValue)")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            switch m {
+            case .pointSystem:
+                PointSystemView(membership: membership)
+            default:
+                Text("TODO: \(m.rawValue)")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
     }
 }

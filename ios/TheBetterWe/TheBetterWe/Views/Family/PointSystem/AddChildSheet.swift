@@ -178,10 +178,6 @@ private struct GenderCircle: View {
     let selected: Bool
     let onTap: () -> Void
 
-    private var emoji: String {
-        gender == .boy ? "👦" : "👧"
-    }
-
     private var label: LocalizedStringKey {
         gender == .boy ? "Boy" : "Girl"
     }
@@ -201,7 +197,7 @@ private struct GenderCircle: View {
                             Circle()
                                 .stroke(selected ? ringColor : Color.clear, lineWidth: 3)
                         )
-                    Text(emoji)
+                    Text(gender.avatarEmoji)
                         .font(.system(size: 52))
                 }
                 Text(label)
