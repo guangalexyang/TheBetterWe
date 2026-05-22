@@ -48,7 +48,7 @@ struct PointSystemView: View {
                     .padding(.horizontal, PointSystemStyle.cardHPadding)
             } else {
                 TabView(selection: $selectedIndex) {
-                    ForEach(Array(children.enumerated()), id: \.offset) { index, child in
+                    ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
                         ChildCard(child: child)
                             .padding(.horizontal, PointSystemStyle.cardHPadding)
                             .tag(index)
@@ -117,7 +117,7 @@ struct PointSystemView: View {
     }
 
     @ViewBuilder
-    private func childContent(child: PSChild?) -> some View {
+    private func childContent(child _: PSChild?) -> some View {
         VStack(spacing: 12) {
             Text("🚧").font(.largeTitle)
             Text("Coming Soon").font(.headline.bold())
