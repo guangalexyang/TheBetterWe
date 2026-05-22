@@ -29,7 +29,7 @@
 - ✅ iOS: `Views/Family/PointSystem/AddChildSheet.swift` — `.medium` sheet, name TextField, "Add" disabled until non-empty; creates mock `PSChild` on confirm
 
 ### In Progress
-- 🔄 **Point System Phase C (mocked UI)** — AwardPointsSheet, RulesView + AddRuleSheet, RedeemSheet still to build; Point System tab in `FamilyView.tabContent` still shows `Text("TODO: pointSystem")`
+- 🔄 **Point System Phase C (remaining mocked UI)** — AwardPointsSheet, RulesView + AddRuleSheet, RedeemSheet still to build; Point System tab in `FamilyView.tabContent` still shows `Text("TODO: pointSystem")`
 
 ### Design changes from original plan
 - **Account-level display name**: Added a first-login `SetDisplayNameView` step before `NoFamilyView`. This display name is stored in `users.display_name` (server) and Keychain (iOS). It is used as a default in per-family flows but can be customized per family.
@@ -43,7 +43,12 @@
 - **Dashboard is widget-based, not tab content**: Originally planned as a simple placeholder; now a full `DashboardView` with draggable module widget cards and per-family order persistence.
 
 ### Next immediate step
-**Point System Phase C (mocked UI)** — remaining views: `AwardPointsSheet`, `RulesView` + `AddRuleSheet`, `RedeemSheet`; then wire Point System tab in `FamilyView`. Server and service layer (Phase A + B) come after UI is approved.
+**Point System Phase C (remaining mocked UI)** — `AwardPointsSheet`, `RulesView` + `AddRuleSheet`, `RedeemSheet`; then wire Point System tab in `FamilyView`.
+
+**Add Child is fully wired to backend** (Phase A + B complete for children):
+- Server: `rules`, `point_events`, `redemptions` tables; `gender` + `birthday_date` on `family_members`
+- Server: `GET/POST /:familyId/point-system/children` in `routes/pointSystem.ts`
+- iOS: `PSChild` Codable, `PointSystemService.fetchChildren/addChild`, `AddChildView` wired with loading/error
 
 Step 5 (Join flow) — `QRScannerView`, `JoinFamilyView`, server `GET /families/by-invite/:code` + `POST /families/:id/join` — deferred until Point System Phase C is complete.
 

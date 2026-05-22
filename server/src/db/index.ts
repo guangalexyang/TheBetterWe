@@ -54,4 +54,47 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_families_invite_code     ON families(invite_code);
 `);
 
+// Point System tables
+db.exec(`
+  CREATE TABLE IF NOT EXISTS rules (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    family_id           INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+    name                TEXT    NOT NULL,
+    description         TEXT,
+    point_cost_per_unit INTEGER,
+    unit_label          TEXT,
+    threshold_amount    INTEGER,
+    threshold_period    TEXT,
+    is_archived         INTEGER NOT NULL DEFAULT 0,
+    created_at          INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+
+  CREATE TABLE IF NOT EXISTS point_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id  INTEGER NOT NULL REFERENCES family_members(id) ON DELETE CASCADE,
+    rule_id    INTEGER REFERENCES rules(id) ON DELETE SET NULL,
+    delta      INTEGER NOT NULL,
+    note       TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+
+  CREATE TABLE IF NOT EXISTS redemptions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    member_id       INTEGER NOT NULL REFERENCES family_members(id) ON DELETE CASCADE,
+    rule_id         INTEGER REFERENCES rules(id) ON DELETE SET NULL,
+    units           INTEGER NOT NULL DEFAULT 1,
+    points_deducted INTEGER NOT NULL DEFAULT 0,
+    note            TEXT,
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_point_events_member ON point_events(member_id);
+  CREATE INDEX IF NOT EXISTS idx_redemptions_member   ON redemptions(member_id);
+  CREATE INDEX IF NOT EXISTS idx_rules_family         ON rules(family_id);
+`);
+
+// Child profile columns — idempotent (SQLite throws if column already exists)
+try { db.exec('ALTER TABLE family_members ADD COLUMN gender TEXT'); } catch {}
+try { db.exec('ALTER TABLE family_members ADD COLUMN birthday_date TEXT'); } catch {}
+
 export default db;

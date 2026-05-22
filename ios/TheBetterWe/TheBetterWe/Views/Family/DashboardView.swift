@@ -9,8 +9,10 @@ struct DashboardView: View {
     @State private var draggingItem: AppModule? = nil
     @State private var dragOffset: CGSize = .zero
     @State private var cardFrames: [AppModule: CGRect] = [:]
-    @State private var mockChildren: [PSChild] = []
+    @State private var children: [PSChild] = []
+    @State private var isLoadingChildren = false
     @State private var showAddChild = false
+    @State private var scrollDisabled = false
 
     var body: some View {
         ScrollView {
@@ -18,7 +20,7 @@ struct DashboardView: View {
                 ForEach(widgetOrder, id: \.self) { module in
                     WidgetCard(
                         module: module,
-                        children: mockChildren,
+                        children: children,
                         onAddChild: module == .pointSystem ? { showAddChild = true } : nil
                     )
                     .scaleEffect(draggingItem == module ? 1.03 : 1.0)
@@ -39,12 +41,22 @@ struct DashboardView: View {
             .padding(16)
         }
         .coordinateSpace(name: "dashboard")
+        .scrollDisabled(scrollDisabled)
         .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
+        .task { await loadChildren() }
         .onAppear { loadWidgetOrder() }
         .onChange(of: widgetOrder) { _, _ in saveWidgetOrder() }
         .navigationDestination(isPresented: $showAddChild) {
-            AddChildView { mockChildren.append($0) }
+            AddChildView(familyId: membership.familyId) { children.append($0) }
         }
+    }
+
+    // MARK: - Children
+
+    private func loadChildren() async {
+        isLoadingChildren = true
+        children = (try? await PointSystemService.fetchChildren(familyId: membership.familyId)) ?? []
+        isLoadingChildren = false
     }
 
     // MARK: - Gesture
@@ -54,6 +66,9 @@ struct DashboardView: View {
             .sequenced(before: DragGesture(coordinateSpace: .named("dashboard")))
             .onChanged { value in
                 switch value {
+                case .first(true):
+                    // Long press fired — disable scroll immediately so DragGesture can win
+                    scrollDisabled = true
                 case .second(_, let drag?):
                     if draggingItem == nil {
                         withAnimation(.easeOut(duration: 0.12)) { draggingItem = module }
@@ -70,6 +85,7 @@ struct DashboardView: View {
                     draggingItem = nil
                     dragOffset = .zero
                 }
+                scrollDisabled = false
             }
     }
 

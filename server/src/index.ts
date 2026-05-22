@@ -3,6 +3,7 @@ import express from 'express';
 import featureToggles from './routes/featureToggles';
 import auth from './routes/auth';
 import families from './routes/families';
+import pointSystem from './routes/pointSystem';
 
 const app = express();
 const port = process.env.PORT ?? 3000;
@@ -15,6 +16,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/auth', auth);
 app.use('/families', families);
+app.use('/families', pointSystem);
 app.use('/config/feature-toggles', featureToggles);
 
 app.listen(port, () => {

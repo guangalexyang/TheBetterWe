@@ -524,6 +524,17 @@
         }
       }
     },
+    "Session expired. Please log in again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会话已过期，请重新登录。"
+          }
+        }
+      }
+    },
     "New Child" : {
       "comment" : "Navigation title of the add-child sheet.",
       "extractionState" : "manual",
