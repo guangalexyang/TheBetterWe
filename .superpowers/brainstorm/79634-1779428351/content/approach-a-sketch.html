@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approach A Sketch</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1a1a; display: flex; justify-content: center; align-items: flex-start; padding: 32px 16px; font-family: -apple-system, sans-serif; }
+
+  .label { font-size: 11px; color: #666; text-align: center; margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+  /* iPhone frame */
+  .phone {
+    width: 375px;
+    background: #f2f2f7;
+    border-radius: 44px;
+    overflow: hidden;
+    border: 8px solid #333;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 44px;
+    background: #f2f2f7;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #000;
+  }
+
+  /* Top section — carousel + dots */
+  .top-section {
+    background: #f2f2f7;
+    padding: 12px 16px 0;
+  }
+
+  /* Child card (the carousel item) */
+  .child-card {
+    border-radius: 18px;
+    height: 130px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .child-card.boy { background: linear-gradient(135deg, #3a7bd5 0%, #5ba8f5 60%, #7ec8f7 100%); }
+  .child-card.girl { background: linear-gradient(135deg, #c94b9e 0%, #e87cc0 60%, #f5a8d8 100%); }
+
+  /* Subtle glare overlay */
+  .child-card::after {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -10%;
+    width: 60%;
+    height: 160%;
+    background: rgba(255,255,255,0.07);
+    border-radius: 50%;
+    transform: rotate(-20deg);
+  }
+
+  .avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+  .avatar {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.18);
+    border: 3px solid rgba(255,255,255,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 42px;
+  }
+
+  .child-info { color: white; z-index: 1; }
+  .child-name { font-size: 26px; font-weight: 700; margin-bottom: 5px; }
+  .child-age { font-size: 14px; opacity: 0.82; }
+
+  /* Page dots */
+  .dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 0 12px;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #c0c0c8;
+  }
+  .dot.active {
+    width: 18px;
+    border-radius: 3px;
+    background: #3a7bd5;
+  }
+
+  /* Divider */
+  .divider { height: 1px; background: #d1d1d6; margin: 0 16px; }
+
+  /* Content section */
+  .content-section {
+    flex: 1;
+    min-height: 420px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 40px 24px;
+  }
+
+  .coming-soon-icon {
+    font-size: 44px;
+    margin-bottom: 6px;
+  }
+  .coming-soon-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1c1c1e;
+  }
+  .coming-soon-sub {
+    font-size: 14px;
+    color: #8e8e93;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  /* Annotation arrows */
+  .annotations {
+    position: relative;
+    width: 375px;
+    margin-top: -1px;
+  }
+</style>
+</head>
+<body>
+<div>
+  <div class="label">Approach A — TabView .page + dots</div>
+  <div class="phone">
+    <div class="status-bar">
+      <span>9:41</span>
+      <span>●●●</span>
+    </div>
+
+    <!-- TOP SECTION -->
+    <div class="top-section">
+      <!-- Carousel card (boy shown, swipe → girl) -->
+      <div class="child-card boy">
+        <div class="avatar-wrap">
+          <div class="avatar">👦</div>
+        </div>
+        <div class="child-info">
+          <div class="child-name">桅</div>
+          <div class="child-age">3 岁</div>
+        </div>
+      </div>
+
+      <!-- Page dots (pill = active, circle = inactive) -->
+      <div class="dots">
+        <div class="dot active"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- CONTENT SECTION -->
+    <div class="content-section">
+      <div class="coming-soon-icon">🚧</div>
+      <div class="coming-soon-title">Coming Soon</div>
+      <div class="coming-soon-sub">Award points, track rules, and redeem rewards — all here.</div>
+    </div>
+  </div>
+
+  <!-- Annotation legend -->
+  <div style="margin-top:20px;width:375px;font-size:12px;color:#aaa;line-height:1.9;">
+    <div><span style="color:#5ba8f5;font-weight:600;">■</span> Top section — gradient tinted by gender, emoji avatar, name + age</div>
+    <div><span style="color:#5ba8f5;font-weight:600;">●</span> Pill dot = current kid · Round dots = other kids · Swipe left/right to switch</div>
+    <div><span style="color:#888;font-weight:600;">─</span> Content section — "coming soon" for now, fills rest of screen</div>
+    <div style="margin-top:8px;color:#666;">Empty state (no kids): card shows "Add your first child" prompt instead</div>
+  </div>
+</div>
+</body>
+</html>

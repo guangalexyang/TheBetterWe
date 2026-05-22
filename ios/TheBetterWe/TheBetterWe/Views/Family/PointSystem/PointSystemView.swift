@@ -61,7 +61,7 @@ struct PointSystemView: View {
                     PageDots(
                         count: children.count,
                         selected: selectedIndex,
-                        activeColor: children[selectedIndex].gender.gradientColors[0]
+                        activeColor: children[selectedIndex].gender.gradientColors.first ?? .accentColor
                     )
                     .padding(.top, 10)
                 }

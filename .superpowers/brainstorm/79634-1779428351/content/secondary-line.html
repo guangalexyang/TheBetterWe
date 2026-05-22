@@ -1,0 +1,72 @@
+<h2>What shows in the secondary line below the name?</h2>
+<p class="subtitle">The Douyin reference shows an account ID. What's the most useful info to show here for parents?</p>
+
+<div style="display:flex;justify-content:center;gap:16px;margin:24px 0;flex-wrap:wrap;">
+
+  <!-- Option A: Points only -->
+  <div style="text-align:center;">
+    <div style="font-size:11px;color:#888;margin-bottom:6px;">A</div>
+    <div style="width:260px;height:90px;border-radius:14px;background:linear-gradient(135deg,#4a90d9,#6ab0f5);display:flex;align-items:center;padding:0 16px;">
+      <div style="width:64px;height:64px;border-radius:50%;background:#ddd;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">👦</div>
+      <div style="margin-left:12px;color:white;">
+        <div style="font-size:17px;font-weight:700;margin-bottom:3px;">桅</div>
+        <div style="font-size:12px;opacity:0.85;">⭐ 150 积分</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Age only -->
+  <div style="text-align:center;">
+    <div style="font-size:11px;color:#888;margin-bottom:6px;">B</div>
+    <div style="width:260px;height:90px;border-radius:14px;background:linear-gradient(135deg,#4a90d9,#6ab0f5);display:flex;align-items:center;padding:0 16px;">
+      <div style="width:64px;height:64px;border-radius:50%;background:#ddd;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">👦</div>
+      <div style="margin-left:12px;color:white;">
+        <div style="font-size:17px;font-weight:700;margin-bottom:3px;">桅</div>
+        <div style="font-size:12px;opacity:0.85;">3 岁</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C: Both -->
+  <div style="text-align:center;">
+    <div style="font-size:11px;color:#888;margin-bottom:6px;">C</div>
+    <div style="width:260px;height:90px;border-radius:14px;background:linear-gradient(135deg,#4a90d9,#6ab0f5);display:flex;align-items:center;padding:0 16px;">
+      <div style="width:64px;height:64px;border-radius:50%;background:#ddd;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">👦</div>
+      <div style="margin-left:12px;color:white;">
+        <div style="font-size:17px;font-weight:700;margin-bottom:3px;">桅</div>
+        <div style="font-size:12px;opacity:0.85;">3 岁 · ⭐ 150 积分</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option D: Name only, no secondary line -->
+  <div style="text-align:center;">
+    <div style="font-size:11px;color:#888;margin-bottom:6px;">D</div>
+    <div style="width:260px;height:90px;border-radius:14px;background:linear-gradient(135deg,#4a90d9,#6ab0f5);display:flex;align-items:center;padding:0 16px;">
+      <div style="width:64px;height:64px;border-radius:50%;background:#ddd;border:2px solid white;display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;">👦</div>
+      <div style="margin-left:12px;color:white;">
+        <div style="font-size:22px;font-weight:700;">桅</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="options">
+  <div class="option" data-choice="points-only" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content"><h3>Points only</h3><p>⭐ 150 积分 — most relevant in the Point System view</p></div>
+  </div>
+  <div class="option" data-choice="age-only" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content"><h3>Age only</h3><p>3 岁 — quick identity context for families with multiple kids</p></div>
+  </div>
+  <div class="option" data-choice="both" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content"><h3>Age + Points</h3><p>3 岁 · ⭐ 150 积分 — complete at a glance, slightly busier</p></div>
+  </div>
+  <div class="option" data-choice="name-only" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content"><h3>Name only</h3><p>Clean and minimal — points live in the content section below</p></div>
+  </div>
+</div>

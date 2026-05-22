@@ -1,0 +1,36 @@
+<h2>What does the "▾" next to the child's name do?</h2>
+<p class="subtitle">In the Douyin reference it's an account switcher. Since swiping already handles switching between kids, what role should this chevron play — or should it be removed?</p>
+
+<div style="display:flex;justify-content:center;margin:24px 0;">
+  <div style="width:340px;height:110px;border-radius:16px;background:linear-gradient(135deg,#4a90d9,#6ab0f5);display:flex;align-items:center;padding:0 20px;position:relative;overflow:hidden;">
+    <div style="width:80px;height:80px;border-radius:50%;background:#ddd;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0;">👦</div>
+    <div style="margin-left:16px;color:white;">
+      <div style="font-size:20px;font-weight:700;margin-bottom:4px;">桅 <span style="font-size:14px;opacity:0.9;">▾</span></div>
+      <div style="font-size:13px;opacity:0.85;">积分: 150 ⭐</div>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="child-menu" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Child options menu</h3>
+      <p>Opens a sheet with actions for this child: Edit info, Archive. Useful once there are many kids.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="remove-chevron" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Remove it</h3>
+      <p>Just show the name with no chevron. Swiping is the only navigation. Cleaner look.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="swipe-hint" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Swipe hint indicator</h3>
+      <p>Replace with page dots (●○○) below the card showing which kid you're on. No tap action.</p>
+    </div>
+  </div>
+</div>
