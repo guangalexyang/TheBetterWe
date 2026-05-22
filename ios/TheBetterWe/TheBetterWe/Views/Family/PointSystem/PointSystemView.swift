@@ -5,11 +5,16 @@ import SwiftUI
 private struct ChildCard: View {
     let child: PSChild
 
+    private static let birthdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
     private func ageString() -> String? {
         guard let birthday = child.birthday else { return nil }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        guard let date = formatter.date(from: birthday) else { return nil }
+        guard let date = Self.birthdayFormatter.date(from: birthday) else { return nil }
         let years = Calendar.current.dateComponents([.year], from: date, to: .now).year ?? 0
         return String(format: String(localized: "%d years old"), years)
     }
@@ -63,20 +68,13 @@ private struct PageDots: View {
     var body: some View {
         HStack(spacing: 6) {
             ForEach(0..<count, id: \.self) { i in
-                if i == selected {
-                    Capsule()
-                        .fill(activeColor)
-                        .frame(width: PointSystemStyle.activeDotWidth,
-                               height: PointSystemStyle.dotSize)
-                } else {
-                    Circle()
-                        .fill(Color(.systemGray3))
-                        .frame(width: PointSystemStyle.dotSize,
-                               height: PointSystemStyle.dotSize)
-                }
+                Capsule()
+                    .fill(i == selected ? activeColor : Color(.systemGray3))
+                    .frame(width: i == selected ? PointSystemStyle.activeDotWidth : PointSystemStyle.dotSize,
+                           height: PointSystemStyle.dotSize)
+                    .animation(.easeInOut(duration: 0.2), value: selected)
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: selected)
     }
 }
 
