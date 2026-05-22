@@ -1,5 +1,149 @@
 import SwiftUI
 
+// MARK: - PointSystemView
+
+struct PointSystemView: View {
+    let membership: FamilyMembership
+
+    @State private var children: [PSChild] = []
+    @State private var selectedIndex: Int = 0
+    @State private var isLoading = false
+    @State private var errorMessage: String? = nil
+    @State private var navigateToAddChild = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            topSection
+                .padding(.top, PointSystemStyle.cardTopPadding)
+                .padding(.bottom, PointSystemStyle.cardBottomPadding)
+            Divider()
+            contentSection
+        }
+        .navigationDestination(isPresented: $navigateToAddChild) {
+            AddChildView(familyId: membership.familyId) { newChild in
+                children.append(newChild)
+                selectedIndex = children.count - 1
+            }
+        }
+        .task { await loadChildren() }
+        .onChange(of: children) { _, newValue in
+            if selectedIndex >= newValue.count {
+                selectedIndex = max(0, newValue.count - 1)
+            }
+        }
+    }
+
+    // MARK: Top section
+
+    @ViewBuilder
+    private var topSection: some View {
+        VStack(spacing: 0) {
+            if isLoading {
+                RoundedRectangle(cornerRadius: PointSystemStyle.cardCornerRadius)
+                    .fill(Color(.systemGray5))
+                    .frame(height: PointSystemStyle.cardHeight)
+                    .padding(.horizontal, PointSystemStyle.cardHPadding)
+            } else if children.isEmpty {
+                emptyCard
+                    .padding(.horizontal, PointSystemStyle.cardHPadding)
+            } else {
+                TabView(selection: $selectedIndex) {
+                    ForEach(Array(children.enumerated()), id: \.offset) { index, child in
+                        ChildCard(child: child)
+                            .padding(.horizontal, PointSystemStyle.cardHPadding)
+                            .tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: PointSystemStyle.cardHeight)
+
+                if children.count > 1 {
+                    PageDots(
+                        count: children.count,
+                        selected: selectedIndex,
+                        activeColor: children[selectedIndex].gender.gradientColors[0]
+                    )
+                    .padding(.top, 10)
+                }
+            }
+        }
+    }
+
+    private var emptyCard: some View {
+        Button { navigateToAddChild = true } label: {
+            VStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("Add your first child")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: PointSystemStyle.cardHeight)
+            .background(
+                RoundedRectangle(cornerRadius: PointSystemStyle.cardCornerRadius)
+                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
+                    .foregroundStyle(Color(.systemGray3))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: PointSystemStyle.cardCornerRadius))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Content section
+
+    @ViewBuilder
+    private var contentSection: some View {
+        if isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let msg = errorMessage {
+            VStack(spacing: 16) {
+                Text(verbatim: msg)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Button("Retry") {
+                    Task { await loadChildren() }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            let selected: PSChild? = children.isEmpty ? nil : children[selectedIndex]
+            childContent(child: selected)
+        }
+    }
+
+    @ViewBuilder
+    private func childContent(child: PSChild?) -> some View {
+        VStack(spacing: 12) {
+            Text("🚧").font(.largeTitle)
+            Text("Coming Soon").font(.headline.bold())
+            Text("Award points, track rules, and redeem rewards — all here.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Data
+
+    private func loadChildren() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            children = try await PointSystemService.fetchChildren(familyId: membership.familyId)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+}
+
 // MARK: - ChildCard
 
 private struct ChildCard: View {
@@ -102,4 +246,23 @@ private struct PageDots: View {
     PageDots(count: 3, selected: 1,
              activeColor: Color(red: 58/255, green: 123/255, blue: 213/255))
         .padding()
+}
+
+#Preview("Empty state") {
+    NavigationStack {
+        PointSystemView(membership: FamilyMembership(
+            familyId: 99, familyName: "Empty Family", memberId: 1,
+            displayName: "Dad", roleKeywords: ["pointSystem"]
+        ))
+    }
+}
+
+#Preview("中文 — empty state") {
+    NavigationStack {
+        PointSystemView(membership: FamilyMembership(
+            familyId: 99, familyName: "杨家", memberId: 1,
+            displayName: "爸爸", roleKeywords: ["pointSystem"]
+        ))
+    }
+    .environment(\.locale, .init(identifier: "zh-Hans"))
 }
