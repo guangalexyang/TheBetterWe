@@ -110,24 +110,10 @@ struct PointSystemView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            let selected: PSChild? = children.isEmpty ? nil : children[selectedIndex]
-            childContent(child: selected)
+        } else if !children.isEmpty {
+            ChildContentView(child: children[selectedIndex])
+                .id(children[selectedIndex].id)
         }
-    }
-
-    @ViewBuilder
-    private func childContent(child _: PSChild?) -> some View {
-        VStack(spacing: 12) {
-            Text("🚧").font(.largeTitle)
-            Text("Coming Soon").font(.headline.bold())
-            Text("Award points, track rules, and redeem rewards — all here.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: Data
@@ -141,6 +127,164 @@ struct PointSystemView: View {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+}
+
+// MARK: - ChildContentView
+
+private struct ChildContentView: View {
+    let child: PSChild
+
+    private enum ExpandedRow: Equatable { case add, deduct }
+
+    @State private var expandedRow: ExpandedRow? = nil
+    @State private var navigateToRecord = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            pointsBanner
+            Color(.systemGray6).frame(height: PointSystemStyle.actionListGap)
+            actionList
+        }
+        .navigationDestination(isPresented: $navigateToRecord) {
+            PointRecordView(child: child)
+        }
+    }
+
+    // MARK: Points banner
+
+    private var pointsBanner: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Points")
+                .font(.caption.uppercaseSmallCaps())
+                .foregroundStyle(.white.opacity(0.75))
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(child.balance, format: .number)
+                    .font(.system(size: PointSystemStyle.pointsValueFontSize, weight: .heavy))
+                    .foregroundStyle(.white)
+                Text("pts")
+                    .font(.system(size: PointSystemStyle.pointsUnitFontSize, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, PointSystemStyle.pointsBannerHPadding)
+        .padding(.vertical, PointSystemStyle.pointsBannerVPadding)
+        .background(
+            LinearGradient(
+                colors: child.gender.gradientColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+    }
+
+    // MARK: Action list
+
+    private var actionList: some View {
+        VStack(spacing: 0) {
+            actionRow(
+                icon: "plus",
+                iconBackground: PointSystemStyle.addIconBackground,
+                label: "Add points",
+                row: .add
+            )
+            Divider()
+                .padding(.leading, PointSystemStyle.rowHPadding + PointSystemStyle.rowIconSize + 12)
+            actionRow(
+                icon: "minus",
+                iconBackground: PointSystemStyle.deductIconBackground,
+                label: "Deduct points",
+                row: .deduct
+            )
+            Divider()
+                .padding(.leading, PointSystemStyle.rowHPadding + PointSystemStyle.rowIconSize + 12)
+            recordRow
+        }
+        .background(Color(.systemBackground))
+    }
+
+    @ViewBuilder
+    private func actionRow(
+        icon: String,
+        iconBackground: Color,
+        label: LocalizedStringKey,
+        row: ExpandedRow
+    ) -> some View {
+        let isOpen = expandedRow == row
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    expandedRow = isOpen ? nil : row
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: PointSystemStyle.rowIconCornerRadius)
+                            .fill(iconBackground)
+                            .frame(width: PointSystemStyle.rowIconSize,
+                                   height: PointSystemStyle.rowIconSize)
+                        Image(systemName: icon)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(label)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(Color(.systemGray3))
+                        .rotationEffect(.degrees(isOpen ? 90 : 0))
+                        .animation(.easeInOut(duration: 0.22), value: isOpen)
+                }
+                .padding(.horizontal, PointSystemStyle.rowHPadding)
+                .padding(.vertical, PointSystemStyle.rowVPadding)
+            }
+            .buttonStyle(.plain)
+
+            if isOpen {
+                HStack(spacing: 8) {
+                    Text("🚧")
+                    Text("Coming soon")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .background(Color(.systemGray6))
+                .clipped()
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private var recordRow: some View {
+        Button {
+            navigateToRecord = true
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: PointSystemStyle.rowIconCornerRadius)
+                        .fill(PointSystemStyle.recordIconBackground)
+                        .frame(width: PointSystemStyle.rowIconSize,
+                               height: PointSystemStyle.rowIconSize)
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Text("Point records")
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(Color(.systemGray3))
+            }
+            .padding(.horizontal, PointSystemStyle.rowHPadding)
+            .padding(.vertical, PointSystemStyle.rowVPadding)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -223,6 +367,28 @@ private struct PageDots: View {
 }
 
 // MARK: - Previews
+
+#Preview("ChildContentView — boy, 1280 pts") {
+    NavigationStack {
+        ChildContentView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
+                                       birthday: "2022-03-15", balance: 1280))
+    }
+}
+
+#Preview("ChildContentView — girl, 0 pts") {
+    NavigationStack {
+        ChildContentView(child: PSChild(memberId: 2, name: "朵", gender: .girl,
+                                       birthday: "2020-07-04", balance: 0))
+    }
+}
+
+#Preview("ChildContentView — 中文") {
+    NavigationStack {
+        ChildContentView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
+                                       birthday: "2022-03-15", balance: 1280))
+    }
+    .environment(\.locale, .init(identifier: "zh-Hans"))
+}
 
 #Preview("ChildCard — boy") {
     ChildCard(child: PSChild(memberId: 1, name: "桅", gender: .boy,
