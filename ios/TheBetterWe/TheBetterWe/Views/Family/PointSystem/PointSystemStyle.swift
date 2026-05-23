@@ -10,6 +10,21 @@ enum PointSystemStyle {
     static let activeDotWidth: CGFloat = 18
     static let cardTopPadding: CGFloat = 12
     static let cardBottomPadding: CGFloat = 8
+
+    // Content section
+    static let pointsBannerHPadding: CGFloat = 20
+    static let pointsBannerVPadding: CGFloat = 16
+    static let pointsValueFontSize: CGFloat = 40
+    static let pointsUnitFontSize: CGFloat = 18
+    static let actionListGap: CGFloat = 8
+    static let rowIconSize: CGFloat = 32
+    static let rowIconCornerRadius: CGFloat = 8
+    static let rowHPadding: CGFloat = 20
+    static let rowVPadding: CGFloat = 14
+
+    static let addIconBackground    = Color(red: 0.91, green: 0.97, blue: 0.91)
+    static let deductIconBackground = Color(red: 0.99, green: 0.91, blue: 0.91)
+    static let recordIconBackground = Color(red: 0.91, green: 0.93, blue: 0.97)
 }
 
 extension ChildGender {

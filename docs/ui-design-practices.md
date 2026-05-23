@@ -233,3 +233,94 @@ Always add both language previews so translations are visible without changing s
 #Preview("English") { LoginView() }
 #Preview("中文") { LoginView().environment(\.locale, .init(identifier: "zh-Hans")) }
 ```
+
+---
+
+## Expandable List Rows
+
+For inline expand/collapse rows (one open at a time), use a single optional enum state. Only one row can be open because assigning a new value automatically closes the previous one.
+
+```swift
+private enum ExpandedRow: Equatable { case add, deduct }
+@State private var expandedRow: ExpandedRow? = nil
+
+// In the row button action:
+withAnimation(.easeInOut(duration: 0.22)) {
+    expandedRow = isOpen ? nil : row   // toggle; opening one closes the other
+}
+```
+
+Apply `.clipped()` to the **panel** itself, not the outer container. The outer VStack must grow freely so the animation layout is correct.
+
+```swift
+VStack(spacing: 0) {
+    Button { ... } label: { ... }
+        .buttonStyle(.plain)
+
+    if isOpen {
+        expandedPanel
+            .clipped()                                              // ← on the panel
+            .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+}
+// No .clipped() here on the outer VStack
+```
+
+Chevron rotation signals open state:
+
+```swift
+Image(systemName: "chevron.right")
+    .rotationEffect(.degrees(isOpen ? 90 : 0))
+    .animation(.easeInOut(duration: 0.22), value: isOpen)
+```
+
+---
+
+## State Reset on Identity Change
+
+When a view has local `@State` that should reset whenever the driving data changes (e.g. swiping to a different child), add `.id(dataItem.id)`. SwiftUI destroys and recreates the view, clearing all `@State`.
+
+```swift
+// Without .id — expandedRow stays open when child switches (bug)
+ChildContentView(child: children[selectedIndex])
+
+// With .id — state resets on every child change
+ChildContentView(child: children[selectedIndex])
+    .id(children[selectedIndex].id)
+```
+
+---
+
+## @ViewBuilder func vs. struct View
+
+`@ViewBuilder func` helpers cannot hold `@State`. If a helper needs local state (expand/collapse, navigation flag), make it a `private struct` instead.
+
+```swift
+// ❌ wrong — @State not allowed in a @ViewBuilder func
+@ViewBuilder
+private func childContent(child: PSChild?) -> some View {
+    @State var expandedRow: ExpandedRow? = nil  // compiler error
+    ...
+}
+
+// ✅ correct — private struct owns its @State
+private struct ChildContentView: View {
+    let child: PSChild
+    @State private var expandedRow: ExpandedRow? = nil
+    ...
+}
+```
+
+---
+
+## Number Formatting
+
+Use SwiftUI's built-in format style for locale-aware grouping separators instead of string interpolation.
+
+```swift
+// ❌ — no grouping separator, not locale-aware
+Text("\(child.balance)")
+
+// ✅ — shows "1,280" in EN, respects locale
+Text(child.balance, format: .number)
+```
