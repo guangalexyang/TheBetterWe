@@ -324,3 +324,58 @@ Text("\(child.balance)")
 // ✅ — shows "1,280" in EN, respects locale
 Text(child.balance, format: .number)
 ```
+
+---
+
+## ViewThatFits — Centered or Scrollable
+
+To build a row that centers its content when it fits and scrolls when it overflows, put `.frame(maxWidth: .infinity)` on the `ViewThatFits` **container**, never on a candidate inside it. A candidate with `maxWidth: .infinity` always claims the proposed width, so `ViewThatFits` always picks it and the scroll fallback is never reached.
+
+```swift
+// ❌ wrong — HStack always wins, ScrollView is unreachable
+ViewThatFits(in: .horizontal) {
+    HStack(spacing: 8) { tabs }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .center)  // always fits
+    ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) { tabs }.padding(.horizontal, 16)
+    }
+}
+
+// ✅ correct — HStack reports natural width; ScrollView activates when tabs overflow
+ViewThatFits(in: .horizontal) {
+    HStack(spacing: 8) { tabs }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+    ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) { tabs }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+}
+.frame(maxWidth: .infinity)  // ← on the container, not inside
+.background(Color(.systemBackground))
+```
+
+---
+
+## Safe Array Subscript with Dynamic Data
+
+When a view subscripts an array with a `@State` index, guard against the array shrinking. SwiftUI re-renders `body` immediately on state change, but `onChange(of:)` fires *after* the render. A stale index crashes before the clamp runs.
+
+```swift
+// ❌ crashes when loadChildren() returns fewer children than selectedIndex
+ChildFullView(child: children[selectedIndex])
+
+// ✅ safe at every render
+let safeIndex = min(selectedIndex, children.count - 1)
+ChildFullView(child: children[safeIndex])
+    .id(children[safeIndex].id)
+```
+
+Keep the `onChange` clamp too — it updates the stored index for subsequent renders:
+
+```swift
+.onChange(of: children) { _, newValue in
+    if selectedIndex >= newValue.count {
+        selectedIndex = max(0, newValue.count - 1)
+    }
+}
