@@ -13,12 +13,13 @@ struct PointSystemView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            topSection
-                .padding(.top, PointSystemStyle.cardTopPadding)
-                .padding(.bottom, PointSystemStyle.cardBottomPadding)
-            Divider()
+            if children.count > 1 {
+                ChildTabBar(children: children, selectedIndex: $selectedIndex)
+                Divider()
+            }
             contentSection
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .navigationDestination(isPresented: $navigateToAddChild) {
             AddChildView(familyId: membership.familyId) { newChild in
                 children.append(newChild)
@@ -33,41 +34,41 @@ struct PointSystemView: View {
         }
     }
 
-    // MARK: Top section
+    // MARK: Content section
 
     @ViewBuilder
-    private var topSection: some View {
-        VStack(spacing: 0) {
-            if isLoading {
-                RoundedRectangle(cornerRadius: PointSystemStyle.cardCornerRadius)
-                    .fill(Color(.systemGray5))
-                    .frame(height: PointSystemStyle.cardHeight)
-                    .padding(.horizontal, PointSystemStyle.cardHPadding)
-            } else if children.isEmpty {
-                emptyCard
-                    .padding(.horizontal, PointSystemStyle.cardHPadding)
-            } else {
-                TabView(selection: $selectedIndex) {
-                    ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
-                        ChildCard(child: child)
-                            .padding(.horizontal, PointSystemStyle.cardHPadding)
-                            .tag(index)
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: PointSystemStyle.cardHeight)
-
-                if children.count > 1 {
-                    PageDots(
-                        count: children.count,
-                        selected: selectedIndex,
-                        activeColor: children[selectedIndex].gender.gradientColors.first ?? .accentColor
-                    )
-                    .padding(.top, 10)
+    private var contentSection: some View {
+        if isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let msg = errorMessage {
+            VStack(spacing: 16) {
+                Text(verbatim: msg)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+                Button("Retry") {
+                    Task { await loadChildren() }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if children.isEmpty {
+            VStack {
+                emptyCard
+                    .padding(.horizontal, PointSystemStyle.cardHPadding)
+                    .padding(.top, PointSystemStyle.cardTopPadding)
+                Spacer()
+            }
+            .frame(maxHeight: .infinity)
+        } else {
+            ChildFullView(child: children[selectedIndex])
+                .id(children[selectedIndex].id)
+                .frame(maxHeight: .infinity, alignment: .top)
         }
     }
+
+    // MARK: Empty card
 
     private var emptyCard: some View {
         Button { navigateToAddChild = true } label: {
@@ -91,31 +92,6 @@ struct PointSystemView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: Content section
-
-    @ViewBuilder
-    private var contentSection: some View {
-        if isLoading {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let msg = errorMessage {
-            VStack(spacing: 16) {
-                Text(verbatim: msg)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                Button("Retry") {
-                    Task { await loadChildren() }
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if !children.isEmpty {
-            ChildContentView(child: children[selectedIndex])
-                .id(children[selectedIndex].id)
-        }
-    }
-
     // MARK: Data
 
     private func loadChildren() async {
@@ -130,9 +106,69 @@ struct PointSystemView: View {
     }
 }
 
-// MARK: - ChildContentView
+// MARK: - ChildTabBar
 
-private struct ChildContentView: View {
+private struct ChildTabBar: View {
+    let children: [PSChild]
+    @Binding var selectedIndex: Int
+
+    var body: some View {
+        // ViewThatFits: centered HStack when tabs fit, scrollable when they don't
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { tabButtons }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) { tabButtons }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+            }
+        }
+        .background(Color(.systemBackground))
+    }
+
+    @ViewBuilder
+    private var tabButtons: some View {
+        ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedIndex = index
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(child.gender.avatarEmoji)
+                        .font(.subheadline)
+                    Text(verbatim: child.name)
+                        .font(.subheadline)
+                        .fontWeight(index == selectedIndex ? .semibold : .regular)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background {
+                    if index == selectedIndex {
+                        Capsule().fill(
+                            LinearGradient(
+                                colors: child.gender.gradientColors,
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                    } else {
+                        Capsule().fill(Color(.systemGray6))
+                    }
+                }
+                .foregroundStyle(index == selectedIndex ? .white : Color(.label))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - ChildFullView
+
+private struct ChildFullView: View {
     let child: PSChild
 
     private enum ExpandedRow: Equatable { case add, deduct }
@@ -142,34 +178,60 @@ private struct ChildContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            pointsBanner
+            childCard
             Color(.systemGray6).frame(height: PointSystemStyle.actionListGap)
             actionList
+            Spacer(minLength: 0)
         }
+        .background(Color(.systemBackground))
         .navigationDestination(isPresented: $navigateToRecord) {
             PointRecordView(child: child)
         }
     }
 
-    // MARK: Points banner
+    // MARK: Combined child info + points card
 
-    private var pointsBanner: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Points")
-                .font(.caption.uppercaseSmallCaps())
-                .foregroundStyle(.white.opacity(0.75))
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(child.balance, format: .number)
-                    .font(.system(size: PointSystemStyle.pointsValueFontSize, weight: .heavy))
-                    .foregroundStyle(.white)
-                Text("pts")
-                    .font(.system(size: PointSystemStyle.pointsUnitFontSize, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+    private var childCard: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: PointSystemStyle.avatarSize, height: PointSystemStyle.avatarSize)
+                    .overlay(
+                        Circle().stroke(Color.white.opacity(0.85),
+                                        lineWidth: PointSystemStyle.avatarBorderWidth)
+                    )
+                Text(child.gender.avatarEmoji)
+                    .font(.system(size: 42))
             }
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(verbatim: child.name)
+                        .font(.title2.bold())
+                        .foregroundStyle(.white)
+                    if let age = ageString() {
+                        Text(verbatim: age)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.80))
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Points")
+                        .font(.caption.uppercaseSmallCaps())
+                        .foregroundStyle(.white.opacity(0.75))
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(child.balance, format: .number)
+                            .font(.system(size: PointSystemStyle.pointsValueFontSize, weight: .heavy))
+                            .foregroundStyle(.white)
+                        Text("pts")
+                            .font(.system(size: PointSystemStyle.pointsUnitFontSize, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                    }
+                }
+            }
+            Spacer()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, PointSystemStyle.pointsBannerHPadding)
-        .padding(.vertical, PointSystemStyle.pointsBannerVPadding)
+        .padding(20)
         .background(
             LinearGradient(
                 colors: child.gender.gradientColors,
@@ -201,7 +263,6 @@ private struct ChildContentView: View {
                 .padding(.leading, PointSystemStyle.rowHPadding + PointSystemStyle.rowIconSize + 12)
             recordRow
         }
-        .background(Color(.systemBackground))
     }
 
     @ViewBuilder
@@ -238,6 +299,7 @@ private struct ChildContentView: View {
                         .rotationEffect(.degrees(isOpen ? 90 : 0))
                         .animation(.easeInOut(duration: 0.22), value: isOpen)
                 }
+                .contentShape(Rectangle())
                 .padding(.horizontal, PointSystemStyle.rowHPadding)
                 .padding(.vertical, PointSystemStyle.rowVPadding)
             }
@@ -260,9 +322,7 @@ private struct ChildContentView: View {
     }
 
     private var recordRow: some View {
-        Button {
-            navigateToRecord = true
-        } label: {
+        Button { navigateToRecord = true } label: {
             HStack(spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: PointSystemStyle.rowIconCornerRadius)
@@ -281,17 +341,14 @@ private struct ChildContentView: View {
                     .font(.caption.bold())
                     .foregroundStyle(Color(.systemGray3))
             }
+            .contentShape(Rectangle())
             .padding(.horizontal, PointSystemStyle.rowHPadding)
             .padding(.vertical, PointSystemStyle.rowVPadding)
         }
         .buttonStyle(.plain)
     }
-}
 
-// MARK: - ChildCard
-
-private struct ChildCard: View {
-    let child: PSChild
+    // MARK: Helpers
 
     private static let birthdayFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -306,112 +363,50 @@ private struct ChildCard: View {
         let years = Calendar.current.dateComponents([.year], from: date, to: .now).year ?? 0
         return String(format: String(localized: "%d years old"), years)
     }
-
-    var body: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.18))
-                    .frame(width: PointSystemStyle.avatarSize, height: PointSystemStyle.avatarSize)
-                    .overlay(
-                        Circle().stroke(Color.white.opacity(0.85),
-                                        lineWidth: PointSystemStyle.avatarBorderWidth)
-                    )
-                Text(child.gender.avatarEmoji)
-                    .font(.system(size: 42))
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(verbatim: child.name)
-                    .font(.title2.bold())
-                    .foregroundStyle(.white)
-                if let age = ageString() {
-                    Text(verbatim: age)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.80))
-                }
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 20)
-        .frame(height: PointSystemStyle.cardHeight)
-        .background(
-            LinearGradient(
-                colors: child.gender.gradientColors,
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        .clipShape(RoundedRectangle(cornerRadius: PointSystemStyle.cardCornerRadius))
-    }
-}
-
-// MARK: - PageDots
-
-private struct PageDots: View {
-    let count: Int
-    let selected: Int
-    let activeColor: Color
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<count, id: \.self) { i in
-                Capsule()
-                    .fill(i == selected ? activeColor : Color(.systemGray3))
-                    .frame(width: i == selected ? PointSystemStyle.activeDotWidth : PointSystemStyle.dotSize,
-                           height: PointSystemStyle.dotSize)
-                    .animation(.easeInOut(duration: 0.2), value: selected)
-            }
-        }
-    }
 }
 
 // MARK: - Previews
 
-#Preview("ChildContentView — boy, 1280 pts") {
+#Preview("Single child — boy") {
     NavigationStack {
-        ChildContentView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                                       birthday: "2022-03-15", balance: 1280))
+        PointSystemView(membership: FamilyMembership(
+            familyId: 1, familyName: "杨家", memberId: 1,
+            displayName: "爸爸", roleKeywords: ["pointSystem"]
+        ))
     }
 }
 
-#Preview("ChildContentView — girl, 0 pts") {
+#Preview("ChildFullView — boy, 1280 pts") {
     NavigationStack {
-        ChildContentView(child: PSChild(memberId: 2, name: "朵", gender: .girl,
-                                       birthday: "2020-07-04", balance: 0))
+        ChildFullView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
+                                    birthday: "2022-03-15", balance: 1280))
     }
 }
 
-#Preview("ChildContentView — 中文") {
+#Preview("ChildFullView — girl, 340 pts") {
     NavigationStack {
-        ChildContentView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                                       birthday: "2022-03-15", balance: 1280))
+        ChildFullView(child: PSChild(memberId: 2, name: "朵", gender: .girl,
+                                    birthday: "2020-07-04", balance: 340))
+    }
+}
+
+#Preview("ChildTabBar — 3 children") {
+    ChildTabBar(
+        children: [
+            PSChild(memberId: 1, name: "桅", gender: .boy, birthday: nil, balance: 0),
+            PSChild(memberId: 2, name: "朵", gender: .girl, birthday: nil, balance: 0),
+            PSChild(memberId: 3, name: "小明", gender: nil, birthday: nil, balance: 0),
+        ],
+        selectedIndex: .constant(0)
+    )
+}
+
+#Preview("中文") {
+    NavigationStack {
+        ChildFullView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
+                                    birthday: "2022-03-15", balance: 1280))
     }
     .environment(\.locale, .init(identifier: "zh-Hans"))
-}
-
-#Preview("ChildCard — boy") {
-    ChildCard(child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                             birthday: "2022-03-15", balance: 0))
-        .padding()
-}
-
-#Preview("ChildCard — girl") {
-    ChildCard(child: PSChild(memberId: 2, name: "朵", gender: .girl,
-                             birthday: "2020-07-04", balance: 0))
-        .padding()
-}
-
-#Preview("ChildCard — unknown, no birthday") {
-    ChildCard(child: PSChild(memberId: 3, name: "小明", gender: nil,
-                             birthday: nil, balance: 0))
-        .padding()
-}
-
-#Preview("PageDots — 3 kids, page 1 active") {
-    PageDots(count: 3, selected: 1,
-             activeColor: Color(red: 58/255, green: 123/255, blue: 213/255))
-        .padding()
 }
 
 #Preview("Empty state") {
@@ -421,14 +416,4 @@ private struct PageDots: View {
             displayName: "Dad", roleKeywords: ["pointSystem"]
         ))
     }
-}
-
-#Preview("中文 — empty state") {
-    NavigationStack {
-        PointSystemView(membership: FamilyMembership(
-            familyId: 99, familyName: "杨家", memberId: 1,
-            displayName: "爸爸", roleKeywords: ["pointSystem"]
-        ))
-    }
-    .environment(\.locale, .init(identifier: "zh-Hans"))
 }
