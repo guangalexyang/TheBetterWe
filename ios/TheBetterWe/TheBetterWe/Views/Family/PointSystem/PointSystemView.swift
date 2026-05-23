@@ -62,8 +62,9 @@ struct PointSystemView: View {
             }
             .frame(maxHeight: .infinity)
         } else {
-            ChildFullView(child: children[selectedIndex])
-                .id(children[selectedIndex].id)
+            let safeIndex = min(selectedIndex, children.count - 1)
+            ChildFullView(child: children[safeIndex])
+                .id(children[safeIndex].id)
                 .frame(maxHeight: .infinity, alignment: .top)
         }
     }
@@ -118,7 +119,6 @@ private struct ChildTabBar: View {
             HStack(spacing: 8) { tabButtons }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .center)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) { tabButtons }
@@ -126,6 +126,7 @@ private struct ChildTabBar: View {
                     .padding(.vertical, 10)
             }
         }
+        .frame(maxWidth: .infinity)
         .background(Color(.systemBackground))
     }
 
