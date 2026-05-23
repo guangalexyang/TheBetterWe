@@ -13,3 +13,11 @@ struct PSChild: Identifiable, Equatable, Codable {
 
     var id: Int { memberId }
 }
+
+struct PointEventResponse: Decodable {
+    let eventId: Int
+    let memberId: Int
+    let delta: Int
+    let note: String?
+    let newBalance: Int
+}

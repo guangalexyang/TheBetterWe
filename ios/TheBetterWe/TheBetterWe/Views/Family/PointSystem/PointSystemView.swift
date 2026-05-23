@@ -4,6 +4,7 @@ import SwiftUI
 
 struct PointSystemView: View {
     let membership: FamilyMembership
+    var onLogOut: () -> Void = {}
 
     @State private var children: [PSChild] = []
     @State private var selectedIndex: Int = 0
@@ -63,9 +64,19 @@ struct PointSystemView: View {
             .frame(maxHeight: .infinity)
         } else {
             let safeIndex = min(selectedIndex, children.count - 1)
-            ChildFullView(child: children[safeIndex])
-                .id(children[safeIndex].id)
-                .frame(maxHeight: .infinity, alignment: .top)
+            let safeChild = children[safeIndex]
+            ChildFullView(
+                child: safeChild,
+                familyId: membership.familyId,
+                onBalanceChange: { newBalance in
+                    if let idx = children.firstIndex(where: { $0.memberId == safeChild.memberId }) {
+                        children[idx].balance = newBalance
+                    }
+                },
+                onLogOut: onLogOut
+            )
+            .id(safeChild.id)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -171,6 +182,9 @@ private struct ChildTabBar: View {
 
 private struct ChildFullView: View {
     let child: PSChild
+    let familyId: Int
+    let onBalanceChange: (Int) -> Void
+    let onLogOut: () -> Void
 
     private enum ExpandedRow: Equatable { case add, deduct }
 
@@ -178,11 +192,12 @@ private struct ChildFullView: View {
     @State private var navigateToRecord = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            childCard
-            Color(.systemGray6).frame(height: PointSystemStyle.actionListGap)
-            actionList
-            Spacer(minLength: 0)
+        ScrollView {
+            VStack(spacing: 0) {
+                childCard
+                Color(.systemGray6).frame(height: PointSystemStyle.actionListGap)
+                actionList
+            }
         }
         .background(Color(.systemBackground))
         .navigationDestination(isPresented: $navigateToRecord) {
@@ -307,17 +322,18 @@ private struct ChildFullView: View {
             .buttonStyle(.plain)
 
             if isOpen {
-                HStack(spacing: 8) {
-                    Text("🚧")
-                    Text("Coming soon")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .background(Color(.systemGray6))
-                .clipped()
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                PointAdjustFormView(
+                    style: row == .add ? .add : .deduct,
+                    familyId: familyId,
+                    memberId: child.memberId,
+                    onSuccess: { newBalance in
+                        onBalanceChange(newBalance)
+                        withAnimation(.easeInOut(duration: 0.22)) {
+                            expandedRow = nil
+                        }
+                    },
+                    onLogOut: onLogOut
+                )
             }
         }
     }
@@ -379,15 +395,25 @@ private struct ChildFullView: View {
 
 #Preview("ChildFullView — boy, 1280 pts") {
     NavigationStack {
-        ChildFullView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                                    birthday: "2022-03-15", balance: 1280))
+        ChildFullView(
+            child: PSChild(memberId: 1, name: "桅", gender: .boy,
+                           birthday: "2022-03-15", balance: 1280),
+            familyId: 1,
+            onBalanceChange: { _ in },
+            onLogOut: {}
+        )
     }
 }
 
 #Preview("ChildFullView — girl, 340 pts") {
     NavigationStack {
-        ChildFullView(child: PSChild(memberId: 2, name: "朵", gender: .girl,
-                                    birthday: "2020-07-04", balance: 340))
+        ChildFullView(
+            child: PSChild(memberId: 2, name: "朵", gender: .girl,
+                           birthday: "2020-07-04", balance: 340),
+            familyId: 1,
+            onBalanceChange: { _ in },
+            onLogOut: {}
+        )
     }
 }
 
@@ -404,8 +430,13 @@ private struct ChildFullView: View {
 
 #Preview("中文") {
     NavigationStack {
-        ChildFullView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                                    birthday: "2022-03-15", balance: 1280))
+        ChildFullView(
+            child: PSChild(memberId: 1, name: "桅", gender: .boy,
+                           birthday: "2022-03-15", balance: 1280),
+            familyId: 1,
+            onBalanceChange: { _ in },
+            onLogOut: {}
+        )
     }
     .environment(\.locale, .init(identifier: "zh-Hans"))
 }

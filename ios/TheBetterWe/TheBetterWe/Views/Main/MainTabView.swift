@@ -18,7 +18,7 @@ struct MainTabView: View {
         ZStack(alignment: .trailing) {
             Group {
                 switch selectedTab {
-                case .family: FamilyView(membership: membership, onDeleted: onFamilyDeleted)
+                case .family: FamilyView(membership: membership, onDeleted: onFamilyDeleted, onLogOut: onLogOut)
                 case .me: MeView(
                     onMenuTap: { withAnimation(.easeInOut(duration: 0.25)) { showMenu = true } },
                     onLogOut: onLogOut

@@ -45,6 +45,28 @@ enum PointSystemService {
         return child
     }
 
+    static func addPointEvent(
+        familyId: Int,
+        memberId: Int,
+        delta: Int,
+        note: String?
+    ) async throws -> PointEventResponse {
+        struct Body: Encodable {
+            let memberId: Int
+            let delta: Int
+            let note: String?
+        }
+        let data = try await post(
+            path: "/families/\(familyId)/point-system/events",
+            body: Body(memberId: memberId, delta: delta, note: note),
+            expectedStatus: 201
+        )
+        guard let response = try? JSONDecoder().decode(PointEventResponse.self, from: data) else {
+            throw PointSystemError.network
+        }
+        return response
+    }
+
     // MARK: - Helpers
 
     private static func get(path: String) async throws -> Data {

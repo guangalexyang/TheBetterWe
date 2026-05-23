@@ -25,6 +25,42 @@ enum PointSystemStyle {
     static let addIconBackground    = Color(red: 0.91, green: 0.97, blue: 0.91)
     static let deductIconBackground = Color(red: 0.99, green: 0.91, blue: 0.91)
     static let recordIconBackground = Color(red: 0.91, green: 0.93, blue: 0.97)
+
+    // Point adjust form
+    static let formHPadding: CGFloat = 20
+    static let formVPadding: CGFloat = 20
+    static let stepperButtonSize: CGFloat = 44
+    static let stepperButtonBorderWidth: CGFloat = 1.5
+    static let stepperValueFontSize: CGFloat = 52
+    static let stepperUnitFontSize: CGFloat = 14
+    static let stepperButtonIconSize: CGFloat = 22
+    static let formFieldCornerRadius: CGFloat = 10
+    static let formFieldHPadding: CGFloat = 12
+    static let formFieldVPadding: CGFloat = 10
+    static let formConfirmVPadding: CGFloat = 13
+    static let formConfirmCornerRadius: CGFloat = 12
+
+    static let addTint    = Color(red: 58/255, green: 123/255, blue: 213/255)
+    static let deductTint = Color(red: 217/255, green: 64/255, blue: 64/255)
+}
+
+// MARK: - ActionStyle
+
+struct ActionStyle {
+    let tint: Color
+    let confirmLabel: LocalizedStringKey
+    let sign: Int  // +1 for add points, -1 for deduct
+
+    static let add = ActionStyle(
+        tint: PointSystemStyle.addTint,
+        confirmLabel: "Add Points",
+        sign: 1
+    )
+    static let deduct = ActionStyle(
+        tint: PointSystemStyle.deductTint,
+        confirmLabel: "Deduct Points",
+        sign: -1
+    )
 }
 
 extension ChildGender {
