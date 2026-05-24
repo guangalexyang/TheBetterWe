@@ -10,6 +10,7 @@ struct DashboardView: View {
     @State private var dragOffset: CGSize = .zero
     @State private var liftOrigin: CGRect = .zero
     @State private var lastHoverIndex: Int? = nil
+    @State private var isReordering = false
     @State private var cardFrames: [AppModule: CGRect] = [:]
     @State private var children: [PSChild] = []
     @State private var isLoadingChildren = false
@@ -53,7 +54,9 @@ struct DashboardView: View {
         }
         .background(
             GeometryReader { geo in
-                Color.clear.onAppear { cardWidth = geo.size.width - 32 }
+                Color.clear
+                    .onAppear { cardWidth = geo.size.width - 32 }
+                    .onChange(of: geo.size.width) { cardWidth = geo.size.width - 32 }
             }
         )
     }
@@ -93,14 +96,16 @@ struct DashboardView: View {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                     draggingModule = nil
                     dragOffset = .zero
-                    liftOrigin = .zero
                 }
+                liftOrigin = .zero
                 lastHoverIndex = nil
+                isReordering = false
                 scrollDisabled = false
             }
     }
 
     private func updateDropPosition(for module: AppModule) {
+        guard !isReordering else { return }
         guard let fromIndex = widgetOrder.firstIndex(of: module) else { return }
         let floatingMidY = liftOrigin.midY + dragOffset.height
 
@@ -115,12 +120,14 @@ struct DashboardView: View {
         guard newIndex != lastHoverIndex else { return }
         lastHoverIndex = newIndex
 
+        isReordering = true
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
             widgetOrder.move(
                 fromOffsets: IndexSet(integer: fromIndex),
                 toOffset: newIndex > fromIndex ? newIndex + 1 : newIndex
             )
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { isReordering = false }
     }
 
     // MARK: - Persistence
