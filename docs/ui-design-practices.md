@@ -509,6 +509,105 @@ Text("\(child.balance, format: .number) pts")
 
 ---
 
+## Drag-to-Reorder (Ghost + Floating Overlay)
+
+For iOS-home-screen-quality drag-to-reorder in a vertical list, use a two-layer `ZStack` — never per-card `.offset`.
+
+**Architecture:**
+
+```swift
+ZStack {
+    ScrollView {
+        VStack(spacing: 12) {              // VStack, not LazyVStack
+            ForEach(items, id: \.self) { item in
+                ItemCard(item: item)
+                    .opacity(draggingItem == item ? 0.0 : 1.0)  // ghost holds space
+                    .gesture(longPressThenDrag(for: item))
+                    .background(GeometryReader { geo in
+                        Color.clear.preference(
+                            key: FramePreference.self,
+                            value: [item: geo.frame(in: .named("container"))]
+                        )
+                    })
+            }
+        }
+        .padding(16)
+    }
+    .scrollDisabled(scrollDisabled)
+    .onPreferenceChange(FramePreference.self) { frames = $0 }
+
+    // Floating card follows the finger
+    if let item = draggingItem {
+        ItemCard(item: item)
+            .frame(width: cardWidth)
+            .scaleEffect(1.05)
+            .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
+            .position(x: liftOrigin.midX + dragOffset.width,
+                      y: liftOrigin.midY + dragOffset.height)
+            .allowsHitTesting(false)
+    }
+}
+.coordinateSpace(name: "container")      // ← on ZStack, not ScrollView
+.background(GeometryReader { geo in
+    Color.clear
+        .onAppear { cardWidth = geo.size.width - 32 }
+        .onChange(of: geo.size.width) { cardWidth = geo.size.width - 32 }
+})
+```
+
+**Key rules:**
+
+- `.coordinateSpace(name:)` goes on the **ZStack**, not the `ScrollView`. If placed on the `ScrollView`, `frames` and `.position()` live in different coordinate spaces and the overlay misaligns when the list is scrolled.
+- Use `VStack`, not `LazyVStack`. Lazy views skip off-screen items, so the `GeometryReader` PreferenceKey never fires for cards that have been scrolled away — `frames` would be incomplete.
+- Capture `liftOrigin = frames[item]` **once** at drag start and never update it mid-drag. The reference point must stay fixed as cards shuffle underneath.
+- Ghost opacity should be `0.0` (fully transparent) — the ghost exists only to hold the layout space.
+
+**Reorder algorithm — fire only on slot change:**
+
+```swift
+@State private var lastHoverIndex: Int? = nil
+@State private var isReordering = false
+
+private func updateDropPosition(for item: T) {
+    guard !isReordering, let fromIndex = order.firstIndex(of: item) else { return }
+    let floatingMidY = liftOrigin.midY + dragOffset.height
+
+    var newIndex = 0
+    for m in order where m != item {
+        if let frame = frames[m], floatingMidY > frame.midY { newIndex += 1 }
+    }
+    guard newIndex != lastHoverIndex else { return }
+    lastHoverIndex = newIndex
+
+    isReordering = true
+    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+        order.move(fromOffsets: IndexSet(integer: fromIndex),
+                   toOffset: newIndex > fromIndex ? newIndex + 1 : newIndex)
+    }
+    let captured = item
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        if draggingItem == captured { isReordering = false }
+    }
+}
+```
+
+`isReordering` adds a 50ms cooldown after each move so stale `frames` (which lag one layout pass behind `order.move`) don't trigger a spurious second swap.
+
+**Persistence — defer to gesture end:**
+
+```swift
+// Guard onChange so it doesn't write on every intermediate reorder step
+.onChange(of: order) { _, _ in
+    guard draggingItem == nil else { return }
+    save()
+}
+
+// In .onEnded:
+save()   // always persist the final order on drop
+```
+
+---
+
 ## Multiline TextField Minimum Height
 
 `TextField(axis: .vertical)` returns near-zero intrinsic height when empty on iOS 26+. Always add `.frame(minHeight: 24)` on the text field itself (before padding) to ensure it is visible and tappable.

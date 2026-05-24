@@ -28,7 +28,7 @@ struct DashboardView: View {
                             children: children,
                             onAddChild: module == .pointSystem ? { showAddChild = true } : nil
                         )
-                        .opacity(draggingModule == module ? 0.3 : 1.0)
+                        .opacity(draggingModule == module ? 0.0 : 1.0)
                         .gesture(longPressThenDrag(for: module))
                         .background(
                             GeometryReader { geo in
