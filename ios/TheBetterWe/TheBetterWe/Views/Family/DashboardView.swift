@@ -6,49 +6,76 @@ struct DashboardView: View {
     let membership: FamilyMembership
 
     @State private var widgetOrder: [AppModule] = []
-    @State private var draggingItem: AppModule? = nil
+    @State private var draggingModule: AppModule? = nil
     @State private var dragOffset: CGSize = .zero
+    @State private var liftOrigin: CGRect = .zero
+    @State private var lastHoverIndex: Int? = nil
+    @State private var isReordering = false
     @State private var cardFrames: [AppModule: CGRect] = [:]
     @State private var children: [PSChild] = []
     @State private var isLoadingChildren = false
     @State private var showAddChild = false
     @State private var scrollDisabled = false
+    @State private var cardWidth: CGFloat = 0
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(widgetOrder, id: \.self) { module in
-                    WidgetCard(
-                        module: module,
-                        children: children,
-                        onAddChild: module == .pointSystem ? { showAddChild = true } : nil
-                    )
-                    .scaleEffect(draggingItem == module ? 1.03 : 1.0)
-                    .opacity(draggingItem == module ? 0.85 : 1.0)
-                    .zIndex(draggingItem == module ? 1 : 0)
-                    .offset(draggingItem == module ? dragOffset : .zero)
-                    .gesture(longPressThenDrag(for: module))
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: DashboardFramePreference.self,
-                                value: [module: geo.frame(in: .named("dashboard"))]
-                            )
-                        }
-                    )
+        ZStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    ForEach(widgetOrder, id: \.self) { module in
+                        WidgetCard(
+                            module: module,
+                            children: children,
+                            onAddChild: module == .pointSystem ? { showAddChild = true } : nil
+                        )
+                        .opacity(draggingModule == module ? 0.0 : 1.0)
+                        .gesture(longPressThenDrag(for: module))
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: DashboardFramePreference.self,
+                                    value: [module: geo.frame(in: .named("dashboard"))]
+                                )
+                            }
+                        )
+                    }
                 }
+                .padding(16)
             }
-            .padding(16)
+            .scrollDisabled(scrollDisabled)
+            .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
+            .task { await loadChildren() }
+            .onAppear { loadWidgetOrder() }
+            .onChange(of: widgetOrder) { _, _ in
+                guard draggingModule == nil else { return }
+                saveWidgetOrder()
+            }
+            .navigationDestination(isPresented: $showAddChild) {
+                AddChildView(familyId: membership.familyId) { children.append($0) }
+            }
+
+            // Floating card — follows the finger during drag
+            if let module = draggingModule {
+                WidgetCard(
+                    module: module,
+                    children: children,
+                    onAddChild: nil
+                )
+                .frame(width: cardWidth)
+                .scaleEffect(1.05)
+                .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
+                .position(x: liftOrigin.midX + dragOffset.width, y: liftOrigin.midY + dragOffset.height)
+                .allowsHitTesting(false)
+            }
         }
         .coordinateSpace(name: "dashboard")
-        .scrollDisabled(scrollDisabled)
-        .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
-        .task { await loadChildren() }
-        .onAppear { loadWidgetOrder() }
-        .onChange(of: widgetOrder) { _, _ in saveWidgetOrder() }
-        .navigationDestination(isPresented: $showAddChild) {
-            AddChildView(familyId: membership.familyId) { children.append($0) }
-        }
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { cardWidth = geo.size.width - 32 }
+                    .onChange(of: geo.size.width) { cardWidth = geo.size.width - 32 }
+            }
+        )
     }
 
     // MARK: - Children
@@ -62,42 +89,65 @@ struct DashboardView: View {
     // MARK: - Gesture
 
     private func longPressThenDrag(for module: AppModule) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.3)
+        LongPressGesture(minimumDuration: 0.4)
             .sequenced(before: DragGesture(coordinateSpace: .named("dashboard")))
             .onChanged { value in
                 switch value {
                 case .first(true):
-                    // Long press fired — disable scroll immediately so DragGesture can win
                     scrollDisabled = true
                 case .second(_, let drag?):
-                    if draggingItem == nil {
-                        withAnimation(.easeOut(duration: 0.12)) { draggingItem = module }
+                    if draggingModule == nil {
+                        liftOrigin = cardFrames[module] ?? .zero
+                        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                            draggingModule = module
+                        }
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     }
                     dragOffset = drag.translation
-                    reorder(dragging: module, at: drag.location)
+                    updateDropPosition(for: module)
                 default:
                     break
                 }
             }
             .onEnded { _ in
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                    draggingItem = nil
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    draggingModule = nil
                     dragOffset = .zero
                 }
+                liftOrigin = .zero
+                lastHoverIndex = nil
+                isReordering = false
                 scrollDisabled = false
+                saveWidgetOrder()
             }
     }
 
-    private func reorder(dragging: AppModule, at location: CGPoint) {
-        guard
-            let target = cardFrames.first(where: { $0.value.contains(location) && $0.key != dragging })?.key,
-            let fromIndex = widgetOrder.firstIndex(of: dragging),
-            let toIndex = widgetOrder.firstIndex(of: target)
-        else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            widgetOrder.move(fromOffsets: IndexSet(integer: fromIndex),
-                             toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex)
+    private func updateDropPosition(for module: AppModule) {
+        guard !isReordering else { return }
+        guard let fromIndex = widgetOrder.firstIndex(of: module) else { return }
+        let floatingMidY = liftOrigin.midY + dragOffset.height
+
+        // Count non-dragging cards whose center is above the floating card's center.
+        // That count is the target slot index in the final order.
+        var newIndex = 0
+        for m in widgetOrder where m != module {
+            guard let frame = cardFrames[m] else { continue }
+            if floatingMidY > frame.midY { newIndex += 1 }
+        }
+
+        guard newIndex != lastHoverIndex else { return }
+        lastHoverIndex = newIndex
+
+        isReordering = true
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            widgetOrder.move(
+                fromOffsets: IndexSet(integer: fromIndex),
+                toOffset: newIndex > fromIndex ? newIndex + 1 : newIndex
+            )
+        }
+        let capturedModule = module
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            if draggingModule == capturedModule { isReordering = false }
         }
     }
 
