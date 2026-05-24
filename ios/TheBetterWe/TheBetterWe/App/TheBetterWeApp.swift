@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppIntents
 
 @main
 struct TheBetterWeApp: App {
@@ -17,6 +18,7 @@ struct TheBetterWeApp: App {
         WindowGroup {
             ContentView()
                 .task {
+                    TheBetterWeShortcuts.updateAppShortcutParameters()
                     // Replace with real server base URL when backend is live.
                     // guard let url = URL(string: "https://api.thebetterwe.com") else { return }
                     // await FeatureToggle.shared.fetch(from: url)
