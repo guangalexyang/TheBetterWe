@@ -42,12 +42,14 @@ struct DashboardView: View {
                 }
                 .padding(16)
             }
-            .coordinateSpace(name: "dashboard")
             .scrollDisabled(scrollDisabled)
             .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
             .task { await loadChildren() }
             .onAppear { loadWidgetOrder() }
-            .onChange(of: widgetOrder) { _, _ in saveWidgetOrder() }
+            .onChange(of: widgetOrder) { _, _ in
+                guard draggingModule == nil else { return }
+                saveWidgetOrder()
+            }
             .navigationDestination(isPresented: $showAddChild) {
                 AddChildView(familyId: membership.familyId) { children.append($0) }
             }
@@ -62,10 +64,11 @@ struct DashboardView: View {
                 .frame(width: cardWidth)
                 .scaleEffect(1.05)
                 .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
-                .position(x: liftOrigin.midX, y: liftOrigin.midY + dragOffset.height)
+                .position(x: liftOrigin.midX + dragOffset.width, y: liftOrigin.midY + dragOffset.height)
                 .allowsHitTesting(false)
             }
         }
+        .coordinateSpace(name: "dashboard")
         .background(
             GeometryReader { geo in
                 Color.clear
@@ -115,6 +118,7 @@ struct DashboardView: View {
                 lastHoverIndex = nil
                 isReordering = false
                 scrollDisabled = false
+                saveWidgetOrder()
             }
     }
 
@@ -141,7 +145,10 @@ struct DashboardView: View {
                 toOffset: newIndex > fromIndex ? newIndex + 1 : newIndex
             )
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { isReordering = false }
+        let capturedModule = module
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            if draggingModule == capturedModule { isReordering = false }
+        }
     }
 
     // MARK: - Persistence
