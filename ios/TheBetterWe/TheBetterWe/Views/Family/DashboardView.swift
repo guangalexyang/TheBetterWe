@@ -140,9 +140,10 @@ private struct WidgetCard: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 16)
             .frame(height: 48)
-            .background(module.widgetHeaderColor)
+            .background(module.widgetHeaderGradient)
 
             cardBody
+                .background(module.widgetBodyBackground)
         }
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
@@ -162,7 +163,6 @@ private struct WidgetCard: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 32)
-                .background(Color(.systemBackground))
         }
     }
 }
@@ -191,12 +191,11 @@ private struct PointSystemEmptyState: View {
                     .font(.system(size: 14, weight: .medium))
             }
             .buttonStyle(.borderedProminent)
-            .tint(.orange)
+            .tint(PointSystemStyle.addTint)
             .padding(.top, 6)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
-        .background(Color(.systemBackground))
     }
 }
 
@@ -209,10 +208,15 @@ private struct PointSystemChildrenList: View {
             ForEach(children) { child in
                 HStack(spacing: 12) {
                     ZStack {
-                        Circle().fill(.orange.opacity(0.15))
-                        Text(verbatim: String(child.name.prefix(1)).uppercased())
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.orange)
+                        Circle().fill(
+                            LinearGradient(
+                                colors: child.gender.gradientColors,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        Text(child.gender.avatarEmoji)
+                            .font(.system(size: 16))
                     }
                     .frame(width: 36, height: 36)
 
@@ -221,9 +225,9 @@ private struct PointSystemChildrenList: View {
 
                     Spacer()
 
-                    Text("\(child.balance) pts")
+                    Text("\(child.balance, format: .number) pts")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(child.gender.tintColor)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -235,7 +239,7 @@ private struct PointSystemChildrenList: View {
                 HStack(spacing: 12) {
                     Image(systemName: "person.badge.plus")
                         .font(.system(size: 16))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(PointSystemStyle.addTint)
                         .frame(width: 36, height: 36)
                     Text("Add Child")
                         .font(.system(size: 14))
@@ -248,19 +252,43 @@ private struct PointSystemChildrenList: View {
             }
             .buttonStyle(.plain)
         }
-        .background(Color(.systemBackground))
     }
 }
 
-// MARK: - AppModule header color (view-layer only)
+// MARK: - AppModule widget theme (view-layer only)
 
 private extension AppModule {
-    var widgetHeaderColor: Color {
+    var widgetHeaderGradient: LinearGradient {
         switch self {
-        case .familyTodo:  return .indigo
-        case .familyNotes: return Color(red: 0.98, green: 0.75, blue: 0.17)
-        case .pointSystem: return .orange
-        case .orderFromMe: return .teal
+        case .familyTodo:
+            return LinearGradient(
+                colors: [Color(red: 74/255,  green: 85/255,  blue: 204/255),
+                         Color(red: 123/255, green: 134/255, blue: 232/255)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .pointSystem:
+            return LinearGradient(
+                colors: [Color(red: 58/255,  green: 123/255, blue: 213/255),
+                         Color(red: 91/255,  green: 168/255, blue: 245/255)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .familyNotes:
+            return LinearGradient(
+                colors: [Color(red: 192/255, green: 122/255, blue: 8/255),
+                         Color(red: 232/255, green: 168/255, blue: 40/255)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .orderFromMe:
+            return LinearGradient(
+                colors: [Color(red: 26/255,  green: 144/255, blue: 144/255),
+                         Color(red: 56/255,  green: 196/255, blue: 184/255)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+
+    var widgetBodyBackground: Color {
+        switch self {
+        case .familyTodo:  return Color(red: 74/255,  green: 85/255,  blue: 204/255).opacity(0.09)
+        case .pointSystem: return Color(red: 58/255,  green: 123/255, blue: 213/255).opacity(0.09)
+        case .familyNotes: return Color(red: 192/255, green: 122/255, blue: 8/255).opacity(0.09)
+        case .orderFromMe: return Color(red: 26/255,  green: 144/255, blue: 144/255).opacity(0.09)
         }
     }
 }

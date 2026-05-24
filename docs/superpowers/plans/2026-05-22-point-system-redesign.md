@@ -1,10 +1,29 @@
+# Point System Redesign Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Replace the swipe carousel in `PointSystemView` with pill tabs (2+ children) or a single view (1 child), merging the child card and points display into one full-width gradient card.
+
+**Architecture:** Single-file rewrite of `PointSystemView.swift`. Remove `ChildCard`, `PageDots`, `topSection`, and the standalone `pointsBanner`. Add `ChildTabBar` (centered pill tabs) and `ChildFullView` (merged gradient card + action rows). No other files change.
+
+**Tech Stack:** SwiftUI, Swift, existing `PointSystemStyle` constants, existing `PointSystemService`, existing `PSChild`/`ChildGender` models.
+
+---
+
+### Task 1: Rewrite `PointSystemView.swift`
+
+**Files:**
+- Modify: `ios/TheBetterWe/TheBetterWe/Views/Family/PointSystem/PointSystemView.swift`
+
+- [ ] **Step 1: Replace the entire file with the new implementation**
+
+```swift
 import SwiftUI
 
 // MARK: - PointSystemView
 
 struct PointSystemView: View {
     let membership: FamilyMembership
-    var onLogOut: () -> Void = {}
 
     @State private var children: [PSChild] = []
     @State private var selectedIndex: Int = 0
@@ -63,20 +82,9 @@ struct PointSystemView: View {
             }
             .frame(maxHeight: .infinity)
         } else {
-            let safeIndex = min(selectedIndex, children.count - 1)
-            let safeChild = children[safeIndex]
-            ChildFullView(
-                child: safeChild,
-                familyId: membership.familyId,
-                onBalanceChange: { newBalance in
-                    if let idx = children.firstIndex(where: { $0.memberId == safeChild.memberId }) {
-                        children[idx].balance = newBalance
-                    }
-                },
-                onLogOut: onLogOut
-            )
-            .id(safeChild.id)
-            .frame(maxHeight: .infinity, alignment: .top)
+            ChildFullView(child: children[selectedIndex])
+                .id(children[selectedIndex].id)
+                .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -130,6 +138,7 @@ private struct ChildTabBar: View {
             HStack(spacing: 8) { tabButtons }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .center)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) { tabButtons }
@@ -137,7 +146,6 @@ private struct ChildTabBar: View {
                     .padding(.vertical, 10)
             }
         }
-        .frame(maxWidth: .infinity)
         .background(Color(.systemBackground))
     }
 
@@ -182,9 +190,6 @@ private struct ChildTabBar: View {
 
 private struct ChildFullView: View {
     let child: PSChild
-    let familyId: Int
-    let onBalanceChange: (Int) -> Void
-    let onLogOut: () -> Void
 
     private enum ExpandedRow: Equatable { case add, deduct }
 
@@ -192,12 +197,11 @@ private struct ChildFullView: View {
     @State private var navigateToRecord = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                childCard
-                Color(.systemGray6).frame(height: PointSystemStyle.actionListGap)
-                actionList
-            }
+        VStack(spacing: 0) {
+            childCard
+            Color(.systemGray6).frame(height: PointSystemStyle.actionListGap)
+            actionList
+            Spacer(minLength: 0)
         }
         .background(Color(.systemBackground))
         .navigationDestination(isPresented: $navigateToRecord) {
@@ -322,18 +326,17 @@ private struct ChildFullView: View {
             .buttonStyle(.plain)
 
             if isOpen {
-                PointAdjustFormView(
-                    style: row == .add ? .add : .deduct,
-                    familyId: familyId,
-                    memberId: child.memberId,
-                    onSuccess: { newBalance in
-                        onBalanceChange(newBalance)
-                        withAnimation(.easeInOut(duration: 0.22)) {
-                            expandedRow = nil
-                        }
-                    },
-                    onLogOut: onLogOut
-                )
+                HStack(spacing: 8) {
+                    Text("🚧")
+                    Text("Coming soon")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+                .background(Color(.systemGray6))
+                .clipped()
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -395,25 +398,15 @@ private struct ChildFullView: View {
 
 #Preview("ChildFullView — boy, 1280 pts") {
     NavigationStack {
-        ChildFullView(
-            child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                           birthday: "2022-03-15", balance: 1280),
-            familyId: 1,
-            onBalanceChange: { _ in },
-            onLogOut: {}
-        )
+        ChildFullView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
+                                    birthday: "2022-03-15", balance: 1280))
     }
 }
 
 #Preview("ChildFullView — girl, 340 pts") {
     NavigationStack {
-        ChildFullView(
-            child: PSChild(memberId: 2, name: "朵", gender: .girl,
-                           birthday: "2020-07-04", balance: 340),
-            familyId: 1,
-            onBalanceChange: { _ in },
-            onLogOut: {}
-        )
+        ChildFullView(child: PSChild(memberId: 2, name: "朵", gender: .girl,
+                                    birthday: "2020-07-04", balance: 340))
     }
 }
 
@@ -430,13 +423,8 @@ private struct ChildFullView: View {
 
 #Preview("中文") {
     NavigationStack {
-        ChildFullView(
-            child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                           birthday: "2022-03-15", balance: 1280),
-            familyId: 1,
-            onBalanceChange: { _ in },
-            onLogOut: {}
-        )
+        ChildFullView(child: PSChild(memberId: 1, name: "桅", gender: .boy,
+                                    birthday: "2022-03-15", balance: 1280))
     }
     .environment(\.locale, .init(identifier: "zh-Hans"))
 }
@@ -449,3 +437,29 @@ private struct ChildFullView: View {
         ))
     }
 }
+```
+
+- [ ] **Step 2: Build in Xcode to verify no compile errors**
+
+Open the project in Xcode and press ⌘B. Expected: Build Succeeded with 0 errors.
+
+Common issues to watch for:
+- `ChildFullView` is `private` — the previews reference it directly which is fine since they're in the same file
+- `ChildTabBar` preview uses `.constant(0)` binding — correct for previews
+
+- [ ] **Step 3: Verify previews**
+
+Open `PointSystemView.swift` in Xcode and check each preview canvas:
+
+- **"ChildFullView — boy, 1280 pts"**: full-width blue gradient card with avatar + name/age (row 1) + Points/1,280 pts (row 2); gap; three action rows filling the rest
+- **"ChildFullView — girl, 340 pts"**: same but pink gradient, 340 pts
+- **"ChildTabBar — 3 children"**: three centered pills, first one blue-filled
+- **"中文"**: "积分" label shows in Chinese, "pts" stays as-is, "%d years old" shows "X岁"
+- **"Empty state"**: dashed card with + icon
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add ios/TheBetterWe/TheBetterWe/Views/Family/PointSystem/PointSystemView.swift
+git commit -m "feat: redesign point system — pill tabs + merged child card"
+```

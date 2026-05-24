@@ -193,35 +193,48 @@ private func validationRow(text: String, passed: Bool) -> some View
 
 ## Async Button Actions
 
-Buttons that will eventually call a backend use a loading state to block double-taps and show feedback during the wait.
+Buttons that call a backend use a loading state to block double-taps and show feedback during the wait.
 
 ```swift
 @State private var isLoading = false
+@State private var errorMessage: String? = nil
 
 Button {
     isLoading = true
+    errorMessage = nil
     Task {
-        try? await Task.sleep(for: .seconds(2)) // replace with real call
-        isLoading = false
+        do {
+            try await SomeService.doAction(...)
+            isLoading = false
+            // handle success (navigate, update state, etc.)
+        } catch SomeError.unauthorized {
+            isLoading = false
+            onLogOut()
+        } catch {
+            isLoading = false
+            errorMessage = error.localizedDescription
+        }
     }
 } label: {
     Group {
         if isLoading {
             ProgressView().tint(.white)
         } else {
-            Text("Log In").font(.body.bold())
+            Text("Submit").font(.body.bold())
         }
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, AuthStyle.buttonVPadding)
-    .background(canLogIn ? Color.red : Color.red.opacity(0.3))
+    .background(canSubmit ? Color.accentColor : Color.accentColor.opacity(0.3))
     .foregroundStyle(.white)
     .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
 }
-.disabled(!canLogIn || isLoading)
-```
+.disabled(!canSubmit || isLoading)
 
-When wiring up the real backend, replace `Task.sleep` with the async service call — everything else stays the same.
+if let msg = errorMessage {
+    Text(verbatim: msg).font(.caption).foregroundStyle(.red)
+}
+```
 
 ---
 
@@ -250,7 +263,7 @@ withAnimation(.easeInOut(duration: 0.22)) {
 }
 ```
 
-Apply `.clipped()` to the **panel** itself, not the outer container. The outer VStack must grow freely so the animation layout is correct.
+Do **not** add `.transition` or `.clipped()` to the panel. Any `.transition` modifier causes visual artifacts (fly-in, fade) that fight the layout animation. `withAnimation` alone handles the height change — the content just appears and disappears with the expanding container.
 
 ```swift
 VStack(spacing: 0) {
@@ -259,11 +272,9 @@ VStack(spacing: 0) {
 
     if isOpen {
         expandedPanel
-            .clipped()                                              // ← on the panel
-            .transition(.opacity.combined(with: .move(edge: .top)))
+        // no .transition, no .clipped()
     }
 }
-// No .clipped() here on the outer VStack
 ```
 
 Chevron rotation signals open state:
@@ -323,4 +334,190 @@ Text("\(child.balance)")
 
 // ✅ — shows "1,280" in EN, respects locale
 Text(child.balance, format: .number)
+```
+
+---
+
+## ViewThatFits — Centered or Scrollable
+
+To build a row that centers its content when it fits and scrolls when it overflows, put `.frame(maxWidth: .infinity)` on the `ViewThatFits` **container**, never on a candidate inside it. A candidate with `maxWidth: .infinity` always claims the proposed width, so `ViewThatFits` always picks it and the scroll fallback is never reached.
+
+```swift
+// ❌ wrong — HStack always wins, ScrollView is unreachable
+ViewThatFits(in: .horizontal) {
+    HStack(spacing: 8) { tabs }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .center)  // always fits
+    ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) { tabs }.padding(.horizontal, 16)
+    }
+}
+
+// ✅ correct — HStack reports natural width; ScrollView activates when tabs overflow
+ViewThatFits(in: .horizontal) {
+    HStack(spacing: 8) { tabs }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+    ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) { tabs }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+    }
+}
+.frame(maxWidth: .infinity)  // ← on the container, not inside
+.background(Color(.systemBackground))
+```
+
+---
+
+## Safe Array Subscript with Dynamic Data
+
+When a view subscripts an array with a `@State` index, guard against the array shrinking. SwiftUI re-renders `body` immediately on state change, but `onChange(of:)` fires *after* the render. A stale index crashes before the clamp runs.
+
+```swift
+// ❌ crashes when loadChildren() returns fewer children than selectedIndex
+ChildFullView(child: children[selectedIndex])
+
+// ✅ safe at every render
+let safeIndex = min(selectedIndex, children.count - 1)
+ChildFullView(child: children[safeIndex])
+    .id(children[safeIndex].id)
+```
+
+Keep the `onChange` clamp too — it updates the stored index for subsequent renders:
+
+```swift
+.onChange(of: children) { _, newValue in
+    if selectedIndex >= newValue.count {
+        selectedIndex = max(0, newValue.count - 1)
+    }
+}
+
+---
+
+## Tinted Reusable Action Forms
+
+When two actions (e.g. Add / Deduct) share the same form layout but differ only in color and label, build one component and pass an `ActionStyle` (color + label) in — never duplicate the layout.
+
+```swift
+struct ActionStyle {
+    let tint: Color
+    let confirmLabel: LocalizedStringKey
+}
+
+// Usage
+PointAdjustFormView(style: .add)    // blue tint, "Add Points"
+PointAdjustFormView(style: .deduct) // red tint,  "Deduct Points"
+```
+
+The tint propagates to: stepper ± buttons, editable number cursor, "More" text link, and confirm button gradient.
+
+---
+
+## Round Floating Stepper
+
+For numeric input where keyboard is secondary to ± tapping, use floating circular buttons flanking a large central number — not a UIKit-style segmented control bar (which reads dated).
+
+```
+  ╭──────╮          ╭──────╮
+  │  −   │    2     │  +   │
+  │      │  POINTS  │      │
+  ╰──────╯          ╰──────╯
+       tap to edit
+```
+
+- Buttons: circle, white background, 1.5pt border, shadow, `font(.system(size:22, weight:.light))`
+- Number: large bold, tinted color when editing (blue cursor appears, buttons dim to 0.35 opacity)
+- "tap to edit" hint sits **below** the stepper row (not inside the value), hidden while editing
+- Default value starts at a sensible low number (e.g. 2) so the user almost always adjusts up
+
+---
+
+## Scrollable Content Sections
+
+When a content section contains expandable rows (or any dynamically growing content), wrap it in `ScrollView` so the bottom tab bar stays fixed and the content scrolls rather than pushing the bar off-screen.
+
+```swift
+var body: some View {
+    ScrollView {
+        VStack(spacing: 0) {
+            headerCard
+            actionList   // may expand with inline forms
+        }
+    }
+    .background(Color(.systemBackground))
+}
+```
+
+Do not add `Spacer(minLength: 0)` inside a `ScrollView` — it has no effect and the scroll view handles sizing automatically.
+
+---
+
+## Widget Card Theme Pattern
+
+Dashboard widget cards use a two-property theme per module: a `LinearGradient` header and a soft tinted body background. Define both in a `private extension AppModule` inside the view file — never in the model.
+
+```swift
+private extension AppModule {
+    var widgetHeaderGradient: LinearGradient {
+        switch self {
+        case .pointSystem:
+            return LinearGradient(
+                colors: [Color(red: 58/255, green: 123/255, blue: 213/255),
+                         Color(red: 91/255, green: 168/255, blue: 245/255)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+        // ... other cases
+        }
+    }
+
+    var widgetBodyBackground: Color {
+        // Leading gradient color at 9% opacity
+        Color(red: 58/255, green: 123/255, blue: 213/255).opacity(0.09)
+    }
+}
+```
+
+Apply them in the card shell — body background at the card level, not inside sub-views:
+
+```swift
+VStack(spacing: 0) {
+    headerBar.background(module.widgetHeaderGradient)
+    cardBody.background(module.widgetBodyBackground)  // ← here, not inside sub-views
+}
+.clipShape(RoundedRectangle(cornerRadius: 16))
+```
+
+Sub-views must **not** set their own `.background(Color(.systemBackground))` — that overrides the card-level tint.
+
+---
+
+## Gender-Tinted List Rows
+
+When showing children in a list, use `child.gender.tintColor` (from `Optional<ChildGender>` extension) for balance/pts text, and gender gradient circles with emoji avatars — not letter initials. This keeps the visual language consistent with `PointSystemView`.
+
+```swift
+// Avatar
+ZStack {
+    Circle().fill(LinearGradient(colors: child.gender.gradientColors,
+                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+    Text(child.gender.avatarEmoji).font(.system(size: 16))
+}
+.frame(width: 36, height: 36)
+
+// Balance
+Text("\(child.balance, format: .number) pts")
+    .foregroundStyle(child.gender.tintColor)
+```
+
+---
+
+## Multiline TextField Minimum Height
+
+`TextField(axis: .vertical)` returns near-zero intrinsic height when empty on iOS 26+. Always add `.frame(minHeight: 24)` on the text field itself (before padding) to ensure it is visible and tappable.
+
+```swift
+TextField("Note (optional)", text: $text, axis: .vertical)
+    .frame(minHeight: 24)          // ← before padding
+    .padding(.horizontal, 12)
+    .padding(.vertical, 10)
+    .background(.white)
+    .clipShape(RoundedRectangle(cornerRadius: 10))
 ```

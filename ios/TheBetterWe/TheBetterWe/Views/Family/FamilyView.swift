@@ -8,6 +8,7 @@ enum FamilyTab: Hashable {
 struct FamilyView: View {
     var membership: FamilyMembership
     var onDeleted: () -> Void = {}
+    var onLogOut: () -> Void = {}
 
     @State private var selectedTab: FamilyTab = .dashboard
     @State private var showDrawer = false
@@ -99,7 +100,7 @@ struct FamilyView: View {
         case .module(let m):
             switch m {
             case .pointSystem:
-                PointSystemView(membership: membership)
+                PointSystemView(membership: membership, onLogOut: onLogOut)
             default:
                 Text("TODO: \(m.rawValue)")
                     .foregroundStyle(.secondary)
