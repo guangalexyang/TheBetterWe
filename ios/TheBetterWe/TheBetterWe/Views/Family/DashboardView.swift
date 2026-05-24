@@ -51,6 +51,20 @@ struct DashboardView: View {
             .navigationDestination(isPresented: $showAddChild) {
                 AddChildView(familyId: membership.familyId) { children.append($0) }
             }
+
+            // Floating card — follows the finger during drag
+            if let module = draggingModule {
+                WidgetCard(
+                    module: module,
+                    children: children,
+                    onAddChild: nil
+                )
+                .frame(width: cardWidth)
+                .scaleEffect(1.05)
+                .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
+                .position(x: liftOrigin.midX, y: liftOrigin.midY + dragOffset.height)
+                .allowsHitTesting(false)
+            }
         }
         .background(
             GeometryReader { geo in
