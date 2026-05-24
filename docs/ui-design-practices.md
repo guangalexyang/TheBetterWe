@@ -451,6 +451,64 @@ Do not add `Spacer(minLength: 0)` inside a `ScrollView` — it has no effect and
 
 ---
 
+## Widget Card Theme Pattern
+
+Dashboard widget cards use a two-property theme per module: a `LinearGradient` header and a soft tinted body background. Define both in a `private extension AppModule` inside the view file — never in the model.
+
+```swift
+private extension AppModule {
+    var widgetHeaderGradient: LinearGradient {
+        switch self {
+        case .pointSystem:
+            return LinearGradient(
+                colors: [Color(red: 58/255, green: 123/255, blue: 213/255),
+                         Color(red: 91/255, green: 168/255, blue: 245/255)],
+                startPoint: .topLeading, endPoint: .bottomTrailing)
+        // ... other cases
+        }
+    }
+
+    var widgetBodyBackground: Color {
+        // Leading gradient color at 9% opacity
+        Color(red: 58/255, green: 123/255, blue: 213/255).opacity(0.09)
+    }
+}
+```
+
+Apply them in the card shell — body background at the card level, not inside sub-views:
+
+```swift
+VStack(spacing: 0) {
+    headerBar.background(module.widgetHeaderGradient)
+    cardBody.background(module.widgetBodyBackground)  // ← here, not inside sub-views
+}
+.clipShape(RoundedRectangle(cornerRadius: 16))
+```
+
+Sub-views must **not** set their own `.background(Color(.systemBackground))` — that overrides the card-level tint.
+
+---
+
+## Gender-Tinted List Rows
+
+When showing children in a list, use `child.gender.tintColor` (from `Optional<ChildGender>` extension) for balance/pts text, and gender gradient circles with emoji avatars — not letter initials. This keeps the visual language consistent with `PointSystemView`.
+
+```swift
+// Avatar
+ZStack {
+    Circle().fill(LinearGradient(colors: child.gender.gradientColors,
+                                 startPoint: .topLeading, endPoint: .bottomTrailing))
+    Text(child.gender.avatarEmoji).font(.system(size: 16))
+}
+.frame(width: 36, height: 36)
+
+// Balance
+Text("\(child.balance, format: .number) pts")
+    .foregroundStyle(child.gender.tintColor)
+```
+
+---
+
 ## Multiline TextField Minimum Height
 
 `TextField(axis: .vertical)` returns near-zero intrinsic height when empty on iOS 26+. Always add `.frame(minHeight: 24)` on the text field itself (before padding) to ensure it is visible and tappable.

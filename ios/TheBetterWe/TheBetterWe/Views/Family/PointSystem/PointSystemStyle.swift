@@ -92,4 +92,12 @@ extension Optional where Wrapped == ChildGender {
     var avatarEmoji: String {
         self?.avatarEmoji ?? "🧒"
     }
+
+    var tintColor: Color {
+        switch self {
+        case .some(.boy):  return Color(red: 58/255,  green: 123/255, blue: 213/255)
+        case .some(.girl): return Color(red: 201/255, green: 75/255,  blue: 158/255)
+        case .none:        return Color(red: 90/255,  green: 123/255, blue: 170/255)
+        }
+    }
 }
