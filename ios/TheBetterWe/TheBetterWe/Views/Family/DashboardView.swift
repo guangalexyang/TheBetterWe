@@ -13,42 +13,50 @@ struct DashboardView: View {
     @State private var isLoadingChildren = false
     @State private var showAddChild = false
     @State private var scrollDisabled = false
+    @State private var cardWidth: CGFloat = 0
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(widgetOrder, id: \.self) { module in
-                    WidgetCard(
-                        module: module,
-                        children: children,
-                        onAddChild: module == .pointSystem ? { showAddChild = true } : nil
-                    )
-                    .scaleEffect(draggingItem == module ? 1.03 : 1.0)
-                    .opacity(draggingItem == module ? 0.85 : 1.0)
-                    .zIndex(draggingItem == module ? 1 : 0)
-                    .offset(draggingItem == module ? dragOffset : .zero)
-                    .gesture(longPressThenDrag(for: module))
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: DashboardFramePreference.self,
-                                value: [module: geo.frame(in: .named("dashboard"))]
-                            )
-                        }
-                    )
+        ZStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    ForEach(widgetOrder, id: \.self) { module in
+                        WidgetCard(
+                            module: module,
+                            children: children,
+                            onAddChild: module == .pointSystem ? { showAddChild = true } : nil
+                        )
+                        .scaleEffect(draggingItem == module ? 1.03 : 1.0)
+                        .opacity(draggingItem == module ? 0.85 : 1.0)
+                        .zIndex(draggingItem == module ? 1 : 0)
+                        .offset(draggingItem == module ? dragOffset : .zero)
+                        .gesture(longPressThenDrag(for: module))
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: DashboardFramePreference.self,
+                                    value: [module: geo.frame(in: .named("dashboard"))]
+                                )
+                            }
+                        )
+                    }
                 }
+                .padding(16)
             }
-            .padding(16)
+            .coordinateSpace(name: "dashboard")
+            .scrollDisabled(scrollDisabled)
+            .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
+            .task { await loadChildren() }
+            .onAppear { loadWidgetOrder() }
+            .onChange(of: widgetOrder) { _, _ in saveWidgetOrder() }
+            .navigationDestination(isPresented: $showAddChild) {
+                AddChildView(familyId: membership.familyId) { children.append($0) }
+            }
         }
-        .coordinateSpace(name: "dashboard")
-        .scrollDisabled(scrollDisabled)
-        .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
-        .task { await loadChildren() }
-        .onAppear { loadWidgetOrder() }
-        .onChange(of: widgetOrder) { _, _ in saveWidgetOrder() }
-        .navigationDestination(isPresented: $showAddChild) {
-            AddChildView(familyId: membership.familyId) { children.append($0) }
-        }
+        .background(
+            GeometryReader { geo in
+                Color.clear.onAppear { cardWidth = geo.size.width - 32 }
+            }
+        )
     }
 
     // MARK: - Children
