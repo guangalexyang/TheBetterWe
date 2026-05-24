@@ -1,4 +1,3 @@
-import AppIntents
 import Foundation
 
 // MARK: - Error
@@ -6,6 +5,7 @@ import Foundation
 enum PointsIntentError: LocalizedError {
     case notLoggedIn
     case notParent
+    case notInFamily
     case childNotFound
     case childAmbiguous
     case network
@@ -14,6 +14,7 @@ enum PointsIntentError: LocalizedError {
         switch self {
         case .notLoggedIn:    return String(localized: "Please log in to TheBetterWe first.")
         case .notParent:      return String(localized: "Only parents can adjust points.")
+        case .notInFamily:    return String(localized: "You haven't joined a family yet. Please open TheBetterWe.")
         case .childNotFound:  return String(localized: "Couldn't find that child. Please open TheBetterWe.")
         case .childAmbiguous: return String(localized: "Multiple children match that name. Please open TheBetterWe.")
         case .network:        return String(localized: "Network error. Please try again.")
@@ -32,10 +33,12 @@ enum PointsIntentSupport {
         let memberships: [FamilyMembership]
         do {
             memberships = try await FamilyService.fetchMine()
+        } catch FamilyError.unauthorized {
+            throw PointsIntentError.notLoggedIn
         } catch {
             throw PointsIntentError.network
         }
-        guard let membership = memberships.first else { throw PointsIntentError.network }
+        guard let membership = memberships.first else { throw PointsIntentError.notInFamily }
         guard !membership.roleKeywords.contains("child") else { throw PointsIntentError.notParent }
         return membership
     }
@@ -52,10 +55,9 @@ enum PointsIntentSupport {
         }
         let query = name.lowercased().trimmingCharacters(in: .whitespaces)
         let matches = children.filter { child in
-            child.name
-                .lowercased()
-                .components(separatedBy: .whitespaces)
-                .contains(query)
+            let childLower = child.name.lowercased()
+            return childLower == query ||
+                childLower.components(separatedBy: .whitespaces).contains(query)
         }
         switch matches.count {
         case 0:  throw PointsIntentError.childNotFound
