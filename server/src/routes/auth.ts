@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import db from '../db';
+import pool from '../db';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -28,10 +28,11 @@ function makeRefreshToken(): { raw: string; hash: string; expiresAt: number } {
   return { raw, hash, expiresAt };
 }
 
-function insertRefreshToken(userId: number, familyId: string, hash: string, expiresAt: number): void {
-  db.prepare(
-    'INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at) VALUES (?, ?, ?, ?)'
-  ).run(userId, familyId, hash, expiresAt);
+async function insertRefreshToken(userId: number, familyId: string, hash: string, expiresAt: number): Promise<void> {
+  await pool.query(
+    'INSERT INTO refresh_tokens (user_id, family_id, token_hash, expires_at) VALUES ($1, $2, $3, $4)',
+    [userId, familyId, hash, expiresAt]
+  );
 }
 
 // POST /auth/signup
@@ -43,23 +44,24 @@ router.post('/signup', async (req: Request, res: Response) => {
     return;
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  const existing = (await pool.query('SELECT id FROM users WHERE username = $1', [username])).rows[0];
   if (existing) {
     res.status(409).json({ error: 'username already taken' });
     return;
   }
 
   const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-  const { lastInsertRowid } = db
-    .prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)')
-    .run(username, passwordHash);
+  const result = await pool.query(
+    'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id',
+    [username, passwordHash]
+  );
+  const userId = result.rows[0].id as number;
 
-  const userId = Number(lastInsertRowid);
   const accessToken = makeAccessToken(userId, username);
   const refresh = makeRefreshToken();
   const familyId = crypto.randomUUID();
 
-  insertRefreshToken(userId, familyId, refresh.hash, refresh.expiresAt);
+  await insertRefreshToken(userId, familyId, refresh.hash, refresh.expiresAt);
 
   res.status(201).json({ accessToken, refreshToken: refresh.raw, displayName: '' });
 });
@@ -73,9 +75,10 @@ router.post('/login', async (req: Request, res: Response) => {
     return;
   }
 
-  const user = db
-    .prepare('SELECT id, username, password_hash, display_name FROM users WHERE username = ?')
-    .get(username) as { id: number; username: string; password_hash: string; display_name: string } | undefined;
+  const user = (await pool.query(
+    'SELECT id, username, password_hash, display_name FROM users WHERE username = $1',
+    [username]
+  )).rows[0] as { id: number; username: string; password_hash: string; display_name: string } | undefined;
 
   const match = user && (await bcrypt.compare(password, user.password_hash));
   if (!match) {
@@ -87,13 +90,13 @@ router.post('/login', async (req: Request, res: Response) => {
   const refresh = makeRefreshToken();
   const familyId = crypto.randomUUID();
 
-  insertRefreshToken(user.id, familyId, refresh.hash, refresh.expiresAt);
+  await insertRefreshToken(user.id, familyId, refresh.hash, refresh.expiresAt);
 
   res.json({ accessToken, refreshToken: refresh.raw, displayName: user.display_name });
 });
 
 // PUT /auth/display-name
-router.put('/display-name', requireAuth, (req: Request, res: Response) => {
+router.put('/display-name', requireAuth, async (req: Request, res: Response) => {
   const { displayName } = req.body as { displayName?: string };
 
   if (!displayName || !displayName.trim()) {
@@ -101,12 +104,12 @@ router.put('/display-name', requireAuth, (req: Request, res: Response) => {
     return;
   }
 
-  db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(displayName.trim(), req.auth!.sub);
+  await pool.query('UPDATE users SET display_name = $1 WHERE id = $2', [displayName.trim(), req.auth!.sub]);
   res.json({ displayName: displayName.trim() });
 });
 
 // POST /auth/refresh
-router.post('/refresh', (req: Request, res: Response) => {
+router.post('/refresh', async (req: Request, res: Response) => {
   const { refreshToken } = req.body as { refreshToken?: string };
 
   if (!refreshToken) {
@@ -117,17 +120,16 @@ router.post('/refresh', (req: Request, res: Response) => {
   const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
   const now = Math.floor(Date.now() / 1000);
 
-  const row = db
-    .prepare(
-      `SELECT rt.id, rt.user_id, rt.family_id, rt.used, rt.expires_at, u.username, u.display_name
-       FROM refresh_tokens rt
-       JOIN users u ON u.id = rt.user_id
-       WHERE rt.token_hash = ?`
-    )
-    .get(hash) as {
-      id: number; user_id: number; family_id: string;
-      used: number; expires_at: number; username: string; display_name: string;
-    } | undefined;
+  const row = (await pool.query(
+    `SELECT rt.id, rt.user_id, rt.family_id, rt.used, rt.expires_at, u.username, u.display_name
+     FROM refresh_tokens rt
+     JOIN users u ON u.id = rt.user_id
+     WHERE rt.token_hash = $1`,
+    [hash]
+  )).rows[0] as {
+    id: number; user_id: number; family_id: string;
+    used: number; expires_at: number; username: string; display_name: string;
+  } | undefined;
 
   if (!row) {
     res.status(401).json({ error: 'invalid refresh token' });
@@ -135,39 +137,40 @@ router.post('/refresh', (req: Request, res: Response) => {
   }
 
   if (row.used) {
-    db.prepare('DELETE FROM refresh_tokens WHERE family_id = ?').run(row.family_id);
+    await pool.query('DELETE FROM refresh_tokens WHERE family_id = $1', [row.family_id]);
     res.status(401).json({ error: 'refresh token reuse detected' });
     return;
   }
 
   if (row.expires_at <= now) {
-    db.prepare('DELETE FROM refresh_tokens WHERE id = ?').run(row.id);
+    await pool.query('DELETE FROM refresh_tokens WHERE id = $1', [row.id]);
     res.status(401).json({ error: 'refresh token expired' });
     return;
   }
 
-  db.prepare('UPDATE refresh_tokens SET used = 1 WHERE id = ?').run(row.id);
+  await pool.query('UPDATE refresh_tokens SET used = 1 WHERE id = $1', [row.id]);
 
   const accessToken = makeAccessToken(row.user_id, row.username);
   const newRefresh = makeRefreshToken();
 
-  insertRefreshToken(row.user_id, row.family_id, newRefresh.hash, newRefresh.expiresAt);
+  await insertRefreshToken(row.user_id, row.family_id, newRefresh.hash, newRefresh.expiresAt);
 
   res.json({ accessToken, refreshToken: newRefresh.raw, displayName: row.display_name });
 });
 
 // POST /auth/logout
-router.post('/logout', (req: Request, res: Response) => {
+router.post('/logout', async (req: Request, res: Response) => {
   const { refreshToken } = req.body as { refreshToken?: string };
 
   if (refreshToken) {
     const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    const row = db
-      .prepare('SELECT family_id FROM refresh_tokens WHERE token_hash = ?')
-      .get(hash) as { family_id: string } | undefined;
+    const row = (await pool.query(
+      'SELECT family_id FROM refresh_tokens WHERE token_hash = $1',
+      [hash]
+    )).rows[0] as { family_id: string } | undefined;
 
     if (row) {
-      db.prepare('DELETE FROM refresh_tokens WHERE family_id = ?').run(row.family_id);
+      await pool.query('DELETE FROM refresh_tokens WHERE family_id = $1', [row.family_id]);
     }
   }
 
