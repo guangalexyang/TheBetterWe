@@ -48,6 +48,7 @@ exports.up = (pgm) => {
     CREATE INDEX IF NOT EXISTS idx_family_members_family_id ON family_members(family_id);
     CREATE INDEX IF NOT EXISTS idx_role_keywords_member_id  ON member_role_keywords(member_id);
     CREATE INDEX IF NOT EXISTS idx_families_invite_code     ON families(invite_code);
+    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family_id ON refresh_tokens(family_id);
 
     CREATE TABLE IF NOT EXISTS rules (
       id                  SERIAL PRIMARY KEY,
