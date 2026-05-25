@@ -36,11 +36,11 @@
 		082371232FAAF9CF008D3222 = {
 			isa = PBXGroup;
 			children = (
+				0823712E2FAAF9CF008D3222 /* TheBetterWe */,
 				0884A5D42FC2C01F00FFE7E9 /* AddPointsIntent.swift */,
 				0884A5D62FC2C01F00FFE7E9 /* DeductPointsIntent.swift */,
 				0884A5D52FC2C01F00FFE7E9 /* PointsIntentSupport.swift */,
 				0884A5D32FC2C01F00FFE7E9 /* TheBetterWeShortcuts.swift */,
-				0823712E2FAAF9CF008D3222 /* TheBetterWe */,
 				0823712D2FAAF9CF008D3222 /* Products */,
 			);
 			sourceTree = "<group>";
