@@ -30,10 +30,11 @@ OrderFromMe and RewardMe may exist as separate web apps with their own hosting/U
 
 ### Server
 - Node.js + Express.js + **TypeScript**
-- For dev: runs locally on this machine
-- SQLite (better-sqlite3) for dev; schema managed inline in `src/db/index.ts` via `CREATE TABLE IF NOT EXISTS` + idempotent `ALTER TABLE` — no migrations directory
+- **PostgreSQL everywhere** — Postgres.app for local dev, fly.io managed Postgres in production
+- Schema managed via numbered migration files in `server/migrations/` using `node-pg-migrate`
+- Local dev: `npm run migrate` then `npm run dev`; deploy: `fly deploy` (migrations run automatically via `release_command`)
 - RESTful API — iOS client communicates via HTTP
-- Migration target: fly.io (or similar) with PostgreSQL in a later phase
+- **Deployed:** `https://thebetterwe-api.fly.dev`
 
 ### Apple Watch
 - Later phase — syncs with iOS under same account
@@ -44,7 +45,7 @@ OrderFromMe and RewardMe may exist as separate web apps with their own hosting/U
 - Personal TODOs and Done items only
 - No family data cached locally
 
-**Server (SQLite for dev, PostgreSQL planned for production):**
+**Server (PostgreSQL — Postgres.app local, fly.io managed Postgres in production):**
 - User accounts and authentication
 - Family groups and membership — a user can belong to multiple families; `family_members` is a junction table
 - Child roles have no user account (`user_id` is null); managed by parents
@@ -109,7 +110,9 @@ TheBetterWe/
     │   ├── models/             # DB query functions (per table)
     │   ├── middleware/         # Auth, error handling, logging
     │   └── services/           # External integrations (OrderFromMe, RewardMe etc.)
-    ├── data/                   # SQLite database file (betterwe.db, git-ignored)
+    ├── migrations/             # node-pg-migrate numbered migration files
+    ├── Dockerfile              # fly.io container build
+    ├── fly.toml                # fly.io deployment config
     ├── feature_flags.json      # Server-side toggle config, edit to enable/disable features
     ├── package.json
     └── .env.example
@@ -121,9 +124,9 @@ Build UI **view by view** — never scaffold multiple views at once without user
 
 ## Development Phases
 
-1. **Phase 1 (current)** — iOS app + local Node/Express server + SQLite; user auth, family setup, Point System (kids + rules + points + redemptions), personal + family TODOs/Done, Highlight of the Day
+1. **Phase 1 (current)** — iOS app + Node/Express server + PostgreSQL; user auth, family setup, Point System (kids + rules + points + redemptions), personal + family TODOs/Done, Highlight of the Day
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
 3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
 4. **Phase 4** — Siri / App Intents; Doubao API
 5. **Phase 5** — Apple Watch companion
-6. **Phase 6** — Migrate backend to fly.io (or chosen host)
+6. **Phase 6 (complete)** — Backend deployed to fly.io with PostgreSQL (`https://thebetterwe-api.fly.dev`)
