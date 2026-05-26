@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
+import { callGemini, parseJson } from '../services/gemini';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -11,6 +12,17 @@ async function isMember(familyId: number, userId: number): Promise<boolean> {
     [familyId, userId]
   );
   return result.rows.length > 0;
+}
+
+function fuzzyMatchChild(
+  query: string,
+  children: Array<{ memberId: number; name: string; balance: number }>
+) {
+  const q = query.toLowerCase().trim();
+  return children.filter((c) => {
+    const lower = c.name.toLowerCase();
+    return lower === q || lower.split(/\s+/).includes(q);
+  });
 }
 
 // GET /families/:familyId/point-system/children
@@ -155,6 +167,127 @@ router.post('/:familyId/point-system/events', async (req: Request, res: Response
   const newBalance = balanceResult.rows[0].newBalance as number;
 
   res.status(201).json({ eventId, memberId, delta, note: safeNote, newBalance });
+});
+
+// POST /families/:familyId/point-system/parse-voice-command
+router.post('/:familyId/point-system/parse-voice-command', async (req: Request, res: Response) => {
+  const familyId = parseInt(req.params.familyId, 10);
+  const userId = req.auth!.sub;
+  const { utterance } = req.body as { utterance?: string };
+
+  if (!utterance?.trim()) {
+    res.status(400).json({ error: 'utterance is required' });
+    return;
+  }
+
+  if (!(await isMember(familyId, userId))) {
+    res.status(403).json({ error: 'not a member of this family' });
+    return;
+  }
+
+  // Fetch children for this family
+  const children = (await pool.query<{ memberId: number; name: string; balance: number }>(
+    `SELECT
+      fm.id           AS "memberId",
+      fm.display_name AS name,
+      COALESCE((SELECT SUM(delta) FROM point_events WHERE member_id = fm.id), 0)::INTEGER AS balance
+    FROM family_members fm
+    WHERE fm.family_id = $1
+      AND EXISTS (
+        SELECT 1 FROM member_role_keywords k
+        WHERE k.member_id = fm.id AND k.keyword = 'child'
+      )`,
+    [familyId]
+  )).rows;
+
+  // Build prompt with today's date for relative date resolution
+  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const prompt = `Today's date is ${todayStr}.
+
+Parse the following family points management command into JSON with exactly these fields:
+- points: positive integer (number of points, 1-9999)
+- isAdd: boolean (true = adding points, false = deducting)
+- childName: string (child's name as mentioned)
+- note: string or null (reason/description, null if not mentioned)
+- date: "YYYY-MM-DD" string or null (resolve relative references like "yesterday", "last Wednesday" using today's date; null if no date mentioned)
+
+Command: "${utterance.trim()}"
+
+Examples:
+- "add 5 points to Noah for doing homework" → {"points":5,"isAdd":true,"childName":"Noah","note":"doing homework","date":null}
+- "deduct 3 points from Emma for not cleaning" → {"points":3,"isAdd":false,"childName":"Emma","note":"not cleaning","date":null}
+- "给Noah加5分因为做了作业" → {"points":5,"isAdd":true,"childName":"Noah","note":"做了作业","date":null}
+- "give Noah 5 points for homework yesterday" (today=2026-05-25) → {"points":5,"isAdd":true,"childName":"Noah","note":"homework","date":"2026-05-24"}
+- "扣Emma3分 last Wednesday" (today=2026-05-25) → {"points":3,"isAdd":false,"childName":"Emma","note":null,"date":"2026-05-21"}
+
+Return ONLY valid JSON. No markdown, no explanation.`;
+
+  const geminiResult = await callGemini(prompt);
+  if (geminiResult.error) {
+    console.error('[parse-voice-command] Gemini error:', geminiResult.error);
+    res.status(500).json({ error: 'gemini_error' });
+    return;
+  }
+
+  // Parse and validate Gemini's response
+  let parsed: { points: unknown; isAdd: unknown; childName: unknown; note: unknown; date: unknown };
+  try {
+    parsed = parseJson(geminiResult.text!);
+  } catch {
+    res.status(400).json({ error: 'unparseable' });
+    return;
+  }
+
+  const { points, isAdd, childName, note, date } = parsed;
+
+  if (
+    typeof points !== 'number' || !Number.isInteger(points) || points < 1 || points > 9999 ||
+    typeof isAdd !== 'boolean' ||
+    typeof childName !== 'string' || !(childName as string).trim() ||
+    (note !== null && typeof note !== 'string') ||
+    (date !== null && typeof date !== 'string')
+  ) {
+    res.status(400).json({ error: 'unparseable' });
+    return;
+  }
+
+  // Validate date format and reject future dates
+  let safeDate: string | null = null;
+  if (date !== null) {
+    const dateStr = date as string;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      res.status(400).json({ error: 'unparseable' });
+      return;
+    }
+    if (dateStr > todayStr) {
+      res.status(400).json({ error: 'future_date' });
+      return;
+    }
+    safeDate = dateStr;
+  }
+
+  // Fuzzy-match child name
+  const matches = fuzzyMatchChild(childName as string, children);
+  if (matches.length === 0) {
+    res.status(404).json({ error: 'child_not_found' });
+    return;
+  }
+  if (matches.length > 1) {
+    res.status(409).json({ error: 'child_ambiguous' });
+    return;
+  }
+
+  const child = matches[0];
+  const delta = (isAdd as boolean) ? (points as number) : -(points as number);
+  const safeNote = (typeof note === 'string' && (note as string).trim()) ? (note as string).trim() : null;
+
+  res.json({
+    memberId: child.memberId,
+    memberName: child.name,
+    delta,
+    note: safeNote,
+    date: safeDate,
+  });
 });
 
 export default router;
