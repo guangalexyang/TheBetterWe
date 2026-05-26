@@ -115,10 +115,11 @@ router.post('/:familyId/point-system/children', async (req: Request, res: Respon
 router.post('/:familyId/point-system/events', async (req: Request, res: Response) => {
   const familyId = parseInt(req.params.familyId, 10);
   const userId = req.auth!.sub;
-  const { memberId, delta, note } = req.body as {
+  const { memberId, delta, note, date } = req.body as {
     memberId?: number;
     delta?: number;
     note?: string;
+    date?: string;
   };
 
   if (!(await isMember(familyId, userId))) {
@@ -154,9 +155,13 @@ router.post('/:familyId/point-system/events', async (req: Request, res: Response
 
   const safeNote = (typeof note === 'string' && note.trim()) ? note.trim() : null;
 
+  // Validate and sanitise optional event date (YYYY-MM-DD); null falls back to CURRENT_DATE in DB
+  const safeDate: string | null =
+    typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+
   const eventResult = await pool.query(
-    'INSERT INTO point_events (member_id, delta, note) VALUES ($1, $2, $3) RETURNING id',
-    [memberId, delta, safeNote]
+    'INSERT INTO point_events (member_id, delta, note, event_date) VALUES ($1, $2, $3, COALESCE($4::DATE, CURRENT_DATE)) RETURNING id',
+    [memberId, delta, safeNote, safeDate]
   );
   const eventId = eventResult.rows[0].id as number;
 
