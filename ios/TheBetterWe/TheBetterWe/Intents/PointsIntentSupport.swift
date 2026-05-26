@@ -8,6 +8,7 @@ enum PointsIntentError: LocalizedError {
     case notInFamily
     case childNotFound
     case childAmbiguous
+    case unparseable
     case network
 
     var errorDescription: String? {
@@ -17,6 +18,7 @@ enum PointsIntentError: LocalizedError {
         case .notInFamily:    return String(localized: "You haven't joined a family yet. Please open TheBetterWe.")
         case .childNotFound:  return String(localized: "Couldn't find that child. Please open TheBetterWe.")
         case .childAmbiguous: return String(localized: "Multiple children match that name. Please open TheBetterWe.")
+        case .unparseable:    return String(localized: "Couldn't understand that command. Try: \"Add 5 points to Noah for doing homework\".")
         case .network:        return String(localized: "Network error. Please try again.")
         }
     }
@@ -41,6 +43,24 @@ enum PointsIntentSupport {
         guard let membership = memberships.first else { throw PointsIntentError.notInFamily }
         guard !membership.roleKeywords.contains("child") else { throw PointsIntentError.notParent }
         return membership
+    }
+
+    /// Sends the utterance to the server, which uses Gemini to parse it.
+    /// Returns a ParsedVoiceCommand with signed delta, optional note, and optional date.
+    static func parseVoiceCommand(utterance: String, familyId: Int) async throws -> ParsedVoiceCommand {
+        do {
+            return try await PointSystemService.parseVoiceCommand(familyId: familyId, utterance: utterance)
+        } catch PointSystemError.unauthorized {
+            throw PointsIntentError.notLoggedIn
+        } catch PointSystemError.unparseable {
+            throw PointsIntentError.unparseable
+        } catch PointSystemError.childNotFound {
+            throw PointsIntentError.childNotFound
+        } catch PointSystemError.childAmbiguous {
+            throw PointsIntentError.childAmbiguous
+        } catch {
+            throw PointsIntentError.network
+        }
     }
 
     /// Finds a unique child by matching `name` case-insensitively against any
@@ -72,14 +92,16 @@ enum PointsIntentSupport {
         familyId: Int,
         memberId: Int,
         delta: Int,
-        note: String?
+        note: String?,
+        date: String? = nil
     ) async throws -> Int {
         do {
             let response = try await PointSystemService.addPointEvent(
                 familyId: familyId,
                 memberId: memberId,
                 delta: delta,
-                note: note
+                note: note,
+                date: date
             )
             return response.newBalance
         } catch PointSystemError.unauthorized {
