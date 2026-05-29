@@ -15,7 +15,7 @@ enum AuthError: LocalizedError {
 }
 
 enum AuthService {
-    static let baseURL = URL(string: "http://localhost:3000")!
+    static let baseURL = APIConfig.baseURL
 
     private static let accessTokenKey  = "accessToken"
     private static let refreshTokenKey = "refreshToken"
