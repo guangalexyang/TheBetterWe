@@ -207,32 +207,35 @@ router.post('/:familyId/point-system/parse-voice-command', async (req: Request, 
 
   // Build prompt with today's date for relative date resolution
   const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const childrenList = children.map(c => c.name).join(', ');
   const prompt = `Today's date is ${todayStr}.
+Available children in this family: ${childrenList}
 
 Parse the following family points management command into JSON with exactly these fields:
 - points: positive integer (number of points, 1-9999)
 - isAdd: boolean (true = adding points, false = deducting)
-- childName: string (child's name as mentioned)
+- childName: string (the child's name from the command; the command may come from voice recognition with ASR errors, so if the heard name is phonetically similar to one of the available children names, use that exact name — otherwise use the name as heard)
 - note: string or null (reason/description, null if not mentioned)
 - date: "YYYY-MM-DD" string or null (resolve relative references like "yesterday", "last Wednesday" using today's date; null if no date mentioned)
 
 Command: "${utterance.trim()}"
 
-Examples:
+Examples (available children: Noah, Emma):
 - "add 5 points to Noah for doing homework" → {"points":5,"isAdd":true,"childName":"Noah","note":"doing homework","date":null}
 - "deduct 3 points from Emma for not cleaning" → {"points":3,"isAdd":false,"childName":"Emma","note":"not cleaning","date":null}
 - "给Noah加5分因为做了作业" → {"points":5,"isAdd":true,"childName":"Noah","note":"做了作业","date":null}
 - "give Noah 5 points for homework yesterday" (today=2026-05-25) → {"points":5,"isAdd":true,"childName":"Noah","note":"homework","date":"2026-05-24"}
-- "扣Emma3分 last Wednesday" (today=2026-05-25) → {"points":3,"isAdd":false,"childName":"Emma","note":null,"date":"2026-05-21"}
 
 Return ONLY valid JSON. No markdown, no explanation.`;
 
+  console.log(`[parse-voice-command] utterance: "${utterance.trim()}" | children: [${childrenList}]`);
   const geminiResult = await callGemini(prompt);
   if (geminiResult.error) {
     console.error('[parse-voice-command] Gemini error:', geminiResult.error);
     res.status(500).json({ error: 'gemini_error' });
     return;
   }
+  console.log(`[parse-voice-command] Gemini raw response: ${geminiResult.text}`);
 
   // Parse and validate Gemini's response
   let parsed: { points: unknown; isAdd: unknown; childName: unknown; note: unknown; date: unknown };
@@ -274,7 +277,7 @@ Return ONLY valid JSON. No markdown, no explanation.`;
   // Fuzzy-match child name
   const matches = fuzzyMatchChild(childName as string, children);
   if (matches.length === 0) {
-    res.status(404).json({ error: 'child_not_found' });
+    res.status(404).json({ error: 'child_not_found', childName });
     return;
   }
   if (matches.length > 1) {
@@ -293,6 +296,165 @@ Return ONLY valid JSON. No markdown, no explanation.`;
     note: safeNote,
     date: safeDate,
   });
+});
+
+// GET /families/:familyId/point-system/members/:memberId/events?limit=20&offset=0
+router.get('/:familyId/point-system/members/:memberId/events', async (req: Request, res: Response) => {
+  const familyId = parseInt(req.params.familyId, 10);
+  const memberId = parseInt(req.params.memberId, 10);
+  const userId = req.auth!.sub;
+  const limit = Math.min(parseInt((req.query.limit as string) ?? '20', 10), 50);
+  const offset = parseInt((req.query.offset as string) ?? '0', 10);
+
+  if (!(await isMember(familyId, userId))) {
+    res.status(403).json({ error: 'not a member of this family' });
+    return;
+  }
+
+  const rows = (await pool.query(
+    `SELECT
+      pe.id          AS "eventId",
+      pe.member_id   AS "memberId",
+      pe.delta,
+      pe.note,
+      pe.event_date  AS "eventDate",
+      pe.created_at  AS "createdAt"
+    FROM point_events pe
+    JOIN family_members fm ON fm.id = pe.member_id
+    WHERE pe.member_id = $1 AND fm.family_id = $2
+    ORDER BY pe.created_at DESC
+    LIMIT $3 OFFSET $4`,
+    [memberId, familyId, limit, offset]
+  )).rows;
+
+  res.json(rows);
+});
+
+// DELETE /families/:familyId/point-system/events/:eventId
+router.delete('/:familyId/point-system/events/:eventId', async (req: Request, res: Response) => {
+  const familyId = parseInt(req.params.familyId, 10);
+  const eventId = parseInt(req.params.eventId, 10);
+  const userId = req.auth!.sub;
+
+  if (!(await isMember(familyId, userId))) {
+    res.status(403).json({ error: 'not a member of this family' });
+    return;
+  }
+
+  const result = await pool.query(
+    `DELETE FROM point_events pe
+     USING family_members fm
+     WHERE pe.id = $1 AND pe.member_id = fm.id AND fm.family_id = $2
+     RETURNING pe.id`,
+    [eventId, familyId]
+  );
+
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'event not found' });
+    return;
+  }
+
+  res.status(204).send();
+});
+
+// GET /families/:familyId/point-system/members/:memberId/goals
+router.get('/:familyId/point-system/members/:memberId/goals', async (req: Request, res: Response) => {
+  const familyId = parseInt(req.params.familyId, 10);
+  const memberId = parseInt(req.params.memberId, 10);
+  const userId = req.auth!.sub;
+
+  if (!(await isMember(familyId, userId))) {
+    res.status(403).json({ error: 'not a member of this family' });
+    return;
+  }
+
+  const rows = (await pool.query(
+    `SELECT
+      pg.id             AS "goalId",
+      pg.member_id      AS "memberId",
+      pg.name,
+      pg.target_points  AS "targetPoints"
+    FROM point_goals pg
+    JOIN family_members fm ON fm.id = pg.member_id
+    WHERE pg.member_id = $1 AND fm.family_id = $2
+    ORDER BY pg.created_at ASC`,
+    [memberId, familyId]
+  )).rows;
+
+  res.json(rows);
+});
+
+// POST /families/:familyId/point-system/goals
+router.post('/:familyId/point-system/goals', async (req: Request, res: Response) => {
+  const familyId = parseInt(req.params.familyId, 10);
+  const userId = req.auth!.sub;
+  const { memberId, name, targetPoints } = req.body as {
+    memberId?: number;
+    name?: string;
+    targetPoints?: number;
+  };
+
+  if (!(await isMember(familyId, userId))) {
+    res.status(403).json({ error: 'not a member of this family' });
+    return;
+  }
+
+  if (
+    typeof memberId !== 'number' ||
+    !name?.trim() ||
+    typeof targetPoints !== 'number' ||
+    !Number.isInteger(targetPoints) ||
+    targetPoints < 1 ||
+    targetPoints > 999999
+  ) {
+    res.status(400).json({ error: 'invalid request' });
+    return;
+  }
+
+  const result = await pool.query(
+    `INSERT INTO point_goals (member_id, name, target_points)
+     SELECT $1, $2, $3
+     WHERE EXISTS (
+       SELECT 1 FROM family_members fm
+       WHERE fm.id = $1 AND fm.family_id = $4
+     )
+     RETURNING id AS "goalId", member_id AS "memberId", name, target_points AS "targetPoints"`,
+    [memberId, name.trim(), targetPoints, familyId]
+  );
+
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'member not found in this family' });
+    return;
+  }
+
+  res.status(201).json(result.rows[0]);
+});
+
+// DELETE /families/:familyId/point-system/goals/:goalId
+router.delete('/:familyId/point-system/goals/:goalId', async (req: Request, res: Response) => {
+  const familyId = parseInt(req.params.familyId, 10);
+  const goalId = parseInt(req.params.goalId, 10);
+  const userId = req.auth!.sub;
+
+  if (!(await isMember(familyId, userId))) {
+    res.status(403).json({ error: 'not a member of this family' });
+    return;
+  }
+
+  const result = await pool.query(
+    `DELETE FROM point_goals pg
+     USING family_members fm
+     WHERE pg.id = $1 AND pg.member_id = fm.id AND fm.family_id = $2
+     RETURNING pg.id`,
+    [goalId, familyId]
+  );
+
+  if (result.rows.length === 0) {
+    res.status(404).json({ error: 'goal not found' });
+    return;
+  }
+
+  res.status(204).send();
 });
 
 export default router;
