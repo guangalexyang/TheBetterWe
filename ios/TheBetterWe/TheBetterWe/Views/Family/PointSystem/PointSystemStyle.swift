@@ -42,6 +42,21 @@ enum PointSystemStyle {
 
     static let addTint    = Color(red: 58/255, green: 123/255, blue: 213/255)
     static let deductTint = Color(red: 217/255, green: 64/255, blue: 64/255)
+
+    // Redesign v1.0.1
+    static let memberGridColumns: Int = 4
+    static let memberAvatarSize: CGFloat = 64
+    static let memberAvatarBorderWidth: CGFloat = 2
+    static let childCardCornerRadius: CGFloat = 16
+    static let childCardBorderWidth: CGFloat = 1
+    static let childCardPadding: CGFloat = 20
+    static let childCardAvatarSize: CGFloat = 56
+    static let pointsDisplayFontSize: CGFloat = 32
+    static let actionButtonHeight: CGFloat = 48
+    static let sectionHeaderFontSize: CGFloat = 20
+    static let activityIconSize: CGFloat = 40
+    static let goalProgressHeight: CGFloat = 16
+    static let goalProgressCornerRadius: CGFloat = 8
 }
 
 // MARK: - ActionStyle
