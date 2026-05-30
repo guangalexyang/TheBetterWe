@@ -25,6 +25,11 @@ function fuzzyMatchChild(
   });
 }
 
+function parseIntParam(value: string | undefined): number | null {
+  const n = parseInt(value ?? '', 10);
+  return isNaN(n) ? null : n;
+}
+
 // GET /families/:familyId/point-system/children
 router.get('/:familyId/point-system/children', async (req: Request, res: Response) => {
   const familyId = parseInt(req.params.familyId, 10);
@@ -300,14 +305,37 @@ Return ONLY valid JSON. No markdown, no explanation.`;
 
 // GET /families/:familyId/point-system/members/:memberId/events?limit=20&offset=0
 router.get('/:familyId/point-system/members/:memberId/events', async (req: Request, res: Response) => {
-  const familyId = parseInt(req.params.familyId, 10);
-  const memberId = parseInt(req.params.memberId, 10);
+  const familyId = parseIntParam(req.params.familyId);
+  const memberId = parseIntParam(req.params.memberId);
   const userId = req.auth!.sub;
-  const limit = Math.min(parseInt((req.query.limit as string) ?? '20', 10), 50);
-  const offset = parseInt((req.query.offset as string) ?? '0', 10);
+
+  if (familyId === null || memberId === null) {
+    res.status(400).json({ error: 'invalid id' });
+    return;
+  }
+
+  const limitRaw = parseIntParam(req.query.limit as string);
+  const offsetRaw = parseIntParam(req.query.offset as string);
+  const limit = Math.min(limitRaw ?? 20, 50);
+  const offset = offsetRaw ?? 0;
 
   if (!(await isMember(familyId, userId))) {
     res.status(403).json({ error: 'not a member of this family' });
+    return;
+  }
+
+  const childMember = (await pool.query(
+    `SELECT fm.id FROM family_members fm
+     WHERE fm.id = $1 AND fm.family_id = $2
+       AND EXISTS (
+         SELECT 1 FROM member_role_keywords k
+         WHERE k.member_id = fm.id AND k.keyword = 'child'
+       )`,
+    [memberId, familyId]
+  )).rows[0] as { id: number } | undefined;
+
+  if (!childMember) {
+    res.status(404).json({ error: 'child member not found in this family' });
     return;
   }
 
@@ -332,9 +360,14 @@ router.get('/:familyId/point-system/members/:memberId/events', async (req: Reque
 
 // DELETE /families/:familyId/point-system/events/:eventId
 router.delete('/:familyId/point-system/events/:eventId', async (req: Request, res: Response) => {
-  const familyId = parseInt(req.params.familyId, 10);
-  const eventId = parseInt(req.params.eventId, 10);
+  const familyId = parseIntParam(req.params.familyId);
+  const eventId = parseIntParam(req.params.eventId);
   const userId = req.auth!.sub;
+
+  if (familyId === null || eventId === null) {
+    res.status(400).json({ error: 'invalid id' });
+    return;
+  }
 
   if (!(await isMember(familyId, userId))) {
     res.status(403).json({ error: 'not a member of this family' });
@@ -359,12 +392,32 @@ router.delete('/:familyId/point-system/events/:eventId', async (req: Request, re
 
 // GET /families/:familyId/point-system/members/:memberId/goals
 router.get('/:familyId/point-system/members/:memberId/goals', async (req: Request, res: Response) => {
-  const familyId = parseInt(req.params.familyId, 10);
-  const memberId = parseInt(req.params.memberId, 10);
+  const familyId = parseIntParam(req.params.familyId);
+  const memberId = parseIntParam(req.params.memberId);
   const userId = req.auth!.sub;
+
+  if (familyId === null || memberId === null) {
+    res.status(400).json({ error: 'invalid id' });
+    return;
+  }
 
   if (!(await isMember(familyId, userId))) {
     res.status(403).json({ error: 'not a member of this family' });
+    return;
+  }
+
+  const childMember = (await pool.query(
+    `SELECT fm.id FROM family_members fm
+     WHERE fm.id = $1 AND fm.family_id = $2
+       AND EXISTS (
+         SELECT 1 FROM member_role_keywords k
+         WHERE k.member_id = fm.id AND k.keyword = 'child'
+       )`,
+    [memberId, familyId]
+  )).rows[0] as { id: number } | undefined;
+
+  if (!childMember) {
+    res.status(404).json({ error: 'child member not found in this family' });
     return;
   }
 
@@ -386,13 +439,18 @@ router.get('/:familyId/point-system/members/:memberId/goals', async (req: Reques
 
 // POST /families/:familyId/point-system/goals
 router.post('/:familyId/point-system/goals', async (req: Request, res: Response) => {
-  const familyId = parseInt(req.params.familyId, 10);
+  const familyId = parseIntParam(req.params.familyId);
   const userId = req.auth!.sub;
   const { memberId, name, targetPoints } = req.body as {
     memberId?: number;
     name?: string;
     targetPoints?: number;
   };
+
+  if (familyId === null) {
+    res.status(400).json({ error: 'invalid id' });
+    return;
+  }
 
   if (!(await isMember(familyId, userId))) {
     res.status(403).json({ error: 'not a member of this family' });
@@ -411,30 +469,41 @@ router.post('/:familyId/point-system/goals', async (req: Request, res: Response)
     return;
   }
 
-  const result = await pool.query(
-    `INSERT INTO point_goals (member_id, name, target_points)
-     SELECT $1, $2, $3
-     WHERE EXISTS (
-       SELECT 1 FROM family_members fm
-       WHERE fm.id = $1 AND fm.family_id = $4
-     )
-     RETURNING id AS "goalId", member_id AS "memberId", name, target_points AS "targetPoints"`,
-    [memberId, name.trim(), targetPoints, familyId]
-  );
+  const childMember = (await pool.query(
+    `SELECT fm.id FROM family_members fm
+     WHERE fm.id = $1 AND fm.family_id = $2
+       AND EXISTS (
+         SELECT 1 FROM member_role_keywords k
+         WHERE k.member_id = fm.id AND k.keyword = 'child'
+       )`,
+    [memberId, familyId]
+  )).rows[0] as { id: number } | undefined;
 
-  if (result.rows.length === 0) {
-    res.status(404).json({ error: 'member not found in this family' });
+  if (!childMember) {
+    res.status(404).json({ error: 'child member not found in this family' });
     return;
   }
+
+  const result = await pool.query(
+    `INSERT INTO point_goals (member_id, name, target_points)
+     VALUES ($1, $2, $3)
+     RETURNING id AS "goalId", member_id AS "memberId", name, target_points AS "targetPoints"`,
+    [memberId, name.trim(), targetPoints]
+  );
 
   res.status(201).json(result.rows[0]);
 });
 
 // DELETE /families/:familyId/point-system/goals/:goalId
 router.delete('/:familyId/point-system/goals/:goalId', async (req: Request, res: Response) => {
-  const familyId = parseInt(req.params.familyId, 10);
-  const goalId = parseInt(req.params.goalId, 10);
+  const familyId = parseIntParam(req.params.familyId);
+  const goalId = parseIntParam(req.params.goalId);
   const userId = req.auth!.sub;
+
+  if (familyId === null || goalId === null) {
+    res.status(400).json({ error: 'invalid id' });
+    return;
+  }
 
   if (!(await isMember(familyId, userId))) {
     res.status(403).json({ error: 'not a member of this family' });
