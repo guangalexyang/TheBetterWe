@@ -3,22 +3,17 @@ import AppIntents
 struct TheBetterWeShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
-            intent: AddPointsIntent(),
+            intent: RecordPointsIntent(),
             phrases: [
-                "Add points in \(.applicationName)",
-                "Award points in \(.applicationName)"
+                "用\(.applicationName)记分",
+                "用\(.applicationName)记录积分",
+                "在\(.applicationName)记分",
+                "在\(.applicationName)记录积分",
+                "Record points in \(.applicationName)",
+                "Log points in \(.applicationName)"
             ],
-            shortTitle: "Add Points",
-            systemImageName: "plus.circle"
-        )
-        AppShortcut(
-            intent: DeductPointsIntent(),
-            phrases: [
-                "Deduct points in \(.applicationName)",
-                "Remove points in \(.applicationName)"
-            ],
-            shortTitle: "Deduct Points",
-            systemImageName: "minus.circle"
+            shortTitle: "记录积分",
+            systemImageName: "mic.circle"
         )
     }
 }

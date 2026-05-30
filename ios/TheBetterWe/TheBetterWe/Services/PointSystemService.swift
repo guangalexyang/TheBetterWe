@@ -1,15 +1,32 @@
 import Foundation
+import OSLog
+
+private let pointSystemLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TheBetterWe", category: "PointSystemService")
 
 enum PointSystemError: LocalizedError {
     case network
     case unauthorized
+    case unparseable
+    case childNotFound
+    case childAmbiguous
 
     var errorDescription: String? {
         switch self {
-        case .network:      return String(localized: "Network error. Please try again.")
-        case .unauthorized: return String(localized: "Session expired. Please log in again.")
+        case .network:        return String(localized: "Network error. Please try again.")
+        case .unauthorized:   return String(localized: "Session expired. Please log in again.")
+        case .unparseable:    return String(localized: "Couldn't understand that command.")
+        case .childNotFound:  return String(localized: "Couldn't find that child.")
+        case .childAmbiguous: return String(localized: "Multiple children match that name.")
         }
     }
+}
+
+struct ParsedVoiceCommand {
+    let memberId: Int
+    let memberName: String
+    let delta: Int       // signed: positive = add, negative = deduct
+    let note: String?
+    let date: String?    // YYYY-MM-DD or nil
 }
 
 enum PointSystemService {
@@ -49,22 +66,121 @@ enum PointSystemService {
         familyId: Int,
         memberId: Int,
         delta: Int,
-        note: String?
+        note: String?,
+        date: String? = nil
     ) async throws -> PointEventResponse {
         struct Body: Encodable {
             let memberId: Int
             let delta: Int
             let note: String?
+            let date: String?
         }
         let data = try await post(
             path: "/families/\(familyId)/point-system/events",
-            body: Body(memberId: memberId, delta: delta, note: note),
+            body: Body(memberId: memberId, delta: delta, note: note, date: date),
             expectedStatus: 201
         )
         guard let response = try? JSONDecoder().decode(PointEventResponse.self, from: data) else {
             throw PointSystemError.network
         }
         return response
+    }
+
+    static func fetchActivities(familyId: Int, memberId: Int, limit: Int = 20, offset: Int = 0) async throws -> [PSActivity] {
+        let data = try await get(path: "/families/\(familyId)/point-system/members/\(memberId)/events?limit=\(limit)&offset=\(offset)")
+        guard let activities = try? JSONDecoder().decode([PSActivity].self, from: data) else {
+            throw PointSystemError.network
+        }
+        return activities
+    }
+
+    static func deleteActivity(familyId: Int, eventId: Int) async throws {
+        try await delete(path: "/families/\(familyId)/point-system/events/\(eventId)")
+    }
+
+    static func fetchGoals(familyId: Int, memberId: Int) async throws -> [PSGoal] {
+        let data = try await get(path: "/families/\(familyId)/point-system/members/\(memberId)/goals")
+        guard let goals = try? JSONDecoder().decode([PSGoal].self, from: data) else {
+            throw PointSystemError.network
+        }
+        return goals
+    }
+
+    static func createGoal(familyId: Int, memberId: Int, name: String, targetPoints: Int) async throws -> PSGoal {
+        struct Body: Encodable {
+            let memberId: Int
+            let name: String
+            let targetPoints: Int
+        }
+        let data = try await post(
+            path: "/families/\(familyId)/point-system/goals",
+            body: Body(memberId: memberId, name: name, targetPoints: targetPoints),
+            expectedStatus: 201
+        )
+        guard let goal = try? JSONDecoder().decode(PSGoal.self, from: data) else {
+            throw PointSystemError.network
+        }
+        return goal
+    }
+
+    static func deleteGoal(familyId: Int, goalId: Int) async throws {
+        try await delete(path: "/families/\(familyId)/point-system/goals/\(goalId)")
+    }
+
+    static func parseVoiceCommand(familyId: Int, utterance: String) async throws -> ParsedVoiceCommand {
+        struct Body: Encodable {
+            let utterance: String
+        }
+        struct Response: Decodable {
+            let memberId: Int
+            let memberName: String
+            let delta: Int
+            let note: String?
+            let date: String?
+        }
+
+        guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
+        var request = URLRequest(url: baseURL.appending(path: "/families/\(familyId)/point-system/parse-voice-command"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try? JSONEncoder().encode(Body(utterance: utterance))
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw PointSystemError.network
+        }
+
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        switch status {
+        case 200:
+            guard let parsed = try? JSONDecoder().decode(Response.self, from: data) else {
+                throw PointSystemError.network
+            }
+            return ParsedVoiceCommand(
+                memberId: parsed.memberId,
+                memberName: parsed.memberName,
+                delta: parsed.delta,
+                note: parsed.note,
+                date: parsed.date
+            )
+        case 400, 500:
+            throw PointSystemError.unparseable
+        case 401:
+            throw PointSystemError.unauthorized
+        case 404:
+            if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let extracted = body["childName"] as? String {
+                pointSystemLogger.warning("child_not_found — Gemini extracted name: '\(extracted)'")
+            }
+            throw PointSystemError.childNotFound
+        case 409:
+            throw PointSystemError.childAmbiguous
+        default:
+            throw PointSystemError.network
+        }
     }
 
     // MARK: - Helpers
@@ -84,6 +200,14 @@ enum PointSystemService {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try? JSONEncoder().encode(body)
         return try await send(request, expectedStatus: expectedStatus)
+    }
+
+    private static func delete(path: String) async throws {
+        guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
+        var request = URLRequest(url: baseURL.appending(path: path))
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        _ = try await send(request, expectedStatus: 204)
     }
 
     private static func send(_ request: URLRequest, expectedStatus: Int) async throws -> Data {

@@ -12,15 +12,60 @@ struct PointSystemView: View {
     @State private var errorMessage: String? = nil
     @State private var navigateToAddChild = false
 
+    private var safeIndex: Int { min(selectedIndex, max(0, children.count - 1)) }
+    private var selectedChild: PSChild? { children.isEmpty ? nil : children[safeIndex] }
+
     var body: some View {
-        VStack(spacing: 0) {
-            if children.count > 1 {
-                ChildTabBar(children: children, selectedIndex: $selectedIndex)
-                Divider()
+        ScrollView {
+            VStack(spacing: 24) {
+                if isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 60)
+                } else if let msg = errorMessage {
+                    errorView(msg)
+                } else {
+                    memberGridSection
+                    if let child = selectedChild {
+                        ChildCardView(
+                            child: child,
+                            familyId: membership.familyId,
+                            onBalanceChange: { newBalance in
+                                if let idx = children.firstIndex(where: { $0.memberId == child.memberId }) {
+                                    children[idx].balance = newBalance
+                                }
+                            },
+                            onLogOut: onLogOut
+                        )
+                        .id(child.id)
+
+                        if FeatureToggle.isActive(.pointGoals) {
+                            GoalProgressSection(
+                                child: child,
+                                familyId: membership.familyId,
+                                onLogOut: onLogOut
+                            )
+                            .id("goals-\(child.id)")
+                        }
+
+                        ActivitySection(
+                            child: child,
+                            familyId: membership.familyId,
+                            onLogOut: onLogOut,
+                            onBalanceChange: { newBalance in
+                                if let idx = children.firstIndex(where: { $0.memberId == child.memberId }) {
+                                    children[idx].balance = newBalance
+                                }
+                            }
+                        )
+                        .id("activity-\(child.id)")
+                    }
+                }
             }
-            contentSection
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Color(.systemGroupedBackground))
         .navigationDestination(isPresented: $navigateToAddChild) {
             AddChildView(familyId: membership.familyId) { newChild in
                 children.append(newChild)
@@ -35,76 +80,71 @@ struct PointSystemView: View {
         }
     }
 
-    // MARK: Content section
+    private var memberGridSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Family Members")
+                .font(.system(size: PointSystemStyle.sectionHeaderFontSize, weight: .bold))
+                .foregroundStyle(.primary)
+
+            if children.isEmpty {
+                Text("Add your first child to get started")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 8)
+            }
+
+            let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: PointSystemStyle.memberGridColumns)
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(Array(children.enumerated()), id: \.element.id) { index, child in
+                    MemberAvatarCell(
+                        child: child,
+                        isSelected: index == safeIndex
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedIndex = index
+                        }
+                    }
+                }
+                Button { navigateToAddChild = true } label: {
+                    VStack(spacing: 6) {
+                        ZStack {
+                            Circle()
+                                .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [5]))
+                                .foregroundStyle(Color(.systemGray3))
+                                .frame(width: PointSystemStyle.memberAvatarSize,
+                                       height: PointSystemStyle.memberAvatarSize)
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(Color(.systemGray3))
+                        }
+                        Text("New")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color(.systemGray3))
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add new child")
+            }
+        }
+        .padding(.top, 8)
+    }
 
     @ViewBuilder
-    private var contentSection: some View {
-        if isLoading {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let msg = errorMessage {
-            VStack(spacing: 16) {
-                Text(verbatim: msg)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-                Button("Retry") {
-                    Task { await loadChildren() }
-                }
+    private func errorView(_ msg: String) -> some View {
+        VStack(spacing: 16) {
+            Text(verbatim: msg)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+            Button("Retry") {
+                Task { await loadChildren() }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if children.isEmpty {
-            VStack {
-                emptyCard
-                    .padding(.horizontal, PointSystemStyle.cardHPadding)
-                    .padding(.top, PointSystemStyle.cardTopPadding)
-                Spacer()
-            }
-            .frame(maxHeight: .infinity)
-        } else {
-            let safeIndex = min(selectedIndex, children.count - 1)
-            let safeChild = children[safeIndex]
-            ChildFullView(
-                child: safeChild,
-                familyId: membership.familyId,
-                onBalanceChange: { newBalance in
-                    if let idx = children.firstIndex(where: { $0.memberId == safeChild.memberId }) {
-                        children[idx].balance = newBalance
-                    }
-                },
-                onLogOut: onLogOut
-            )
-            .id(safeChild.id)
-            .frame(maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 60)
     }
-
-    // MARK: Empty card
-
-    private var emptyCard: some View {
-        Button { navigateToAddChild = true } label: {
-            VStack(spacing: 8) {
-                Image(systemName: "plus")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-                Text("Add your first child")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: PointSystemStyle.cardHeight)
-            .background(
-                RoundedRectangle(cornerRadius: PointSystemStyle.cardCornerRadius)
-                    .stroke(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-                    .foregroundStyle(Color(.systemGray3))
-            )
-            .contentShape(RoundedRectangle(cornerRadius: PointSystemStyle.cardCornerRadius))
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: Data
 
     private func loadChildren() async {
         isLoading = true
@@ -117,6 +157,507 @@ struct PointSystemView: View {
         isLoading = false
     }
 }
+
+// MARK: - MemberAvatarCell
+
+private struct MemberAvatarCell: View {
+    let child: PSChild
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(
+                            isSelected ? Color.accentColor : Color(.systemGray4),
+                            lineWidth: isSelected ? PointSystemStyle.memberAvatarBorderWidth + 1 : PointSystemStyle.memberAvatarBorderWidth
+                        )
+                        .frame(width: PointSystemStyle.memberAvatarSize,
+                               height: PointSystemStyle.memberAvatarSize)
+                    Text(child.gender.avatarEmoji)
+                        .font(.system(size: 28))
+                }
+                Text(verbatim: child.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.18), value: isSelected)
+    }
+}
+
+// MARK: - ChildCardView
+
+private struct ChildCardView: View {
+    let child: PSChild
+    let familyId: Int
+    let onBalanceChange: (Int) -> Void
+    let onLogOut: () -> Void
+
+    private enum Sheet: Int, Identifiable {
+        case deduct = 0
+        case reward = 1
+        var id: Int { rawValue }
+    }
+
+    @State private var activeSheet: Sheet? = nil
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack(alignment: .center, spacing: 16) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .strokeBorder(Color.accentColor, lineWidth: PointSystemStyle.memberAvatarBorderWidth)
+                            .frame(width: PointSystemStyle.childCardAvatarSize,
+                                   height: PointSystemStyle.childCardAvatarSize)
+                        Text(child.gender.avatarEmoji)
+                            .font(.system(size: 24))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: child.name)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        if let age = ageString() {
+                            Text(verbatim: age)
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text(child.balance, format: .number)
+                        .font(.system(size: PointSystemStyle.pointsDisplayFontSize, weight: .heavy))
+                        .foregroundStyle(Color.accentColor)
+                        .contentTransition(.numericText())
+                    Text("points")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Divider()
+
+            HStack(spacing: 12) {
+                Button {
+                    activeSheet = .deduct
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "minus")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Deduct")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: PointSystemStyle.actionButtonHeight)
+                    .background(Color(.systemGray6))
+                    .foregroundStyle(.primary)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    activeSheet = .reward
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Reward")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: PointSystemStyle.actionButtonHeight)
+                    .background(Color.accentColor)
+                    .foregroundStyle(.white)
+                    .clipShape(Capsule())
+                    .shadow(color: Color.accentColor.opacity(0.35), radius: 6, y: 3)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(PointSystemStyle.childCardPadding)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: PointSystemStyle.childCardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: PointSystemStyle.childCardCornerRadius)
+                .strokeBorder(Color(.systemGray4), lineWidth: PointSystemStyle.childCardBorderWidth)
+        )
+        .sheet(item: $activeSheet) { sheet in
+            PointAdjustFormView(
+                style: sheet == .reward ? .add : .deduct,
+                familyId: familyId,
+                memberId: child.memberId,
+                onSuccess: { newBalance in
+                    onBalanceChange(newBalance)
+                    activeSheet = nil
+                },
+                onLogOut: onLogOut,
+                onDismiss: { activeSheet = nil }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.hidden)
+        }
+    }
+
+    private static let birthdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    private func ageString() -> String? {
+        guard let birthday = child.birthday,
+              let date = Self.birthdayFormatter.date(from: birthday) else { return nil }
+        let years = Calendar.current.dateComponents([.year], from: date, to: .now).year ?? 0
+        return String(format: String(localized: "%d years old"), years)
+    }
+}
+
+// MARK: - GoalProgressSection
+
+private struct GoalProgressSection: View {
+    let child: PSChild
+    let familyId: Int
+    let onLogOut: () -> Void
+
+    @State private var goals: [PSGoal] = []
+    @State private var isLoading = false
+    @State private var showAddGoal = false
+    @State private var createGoalErrorMessage: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Progress to Goal")
+                    .font(.system(size: PointSystemStyle.sectionHeaderFontSize, weight: .bold))
+                Spacer()
+                Button {
+                    showAddGoal = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(Color.accentColor)
+                        .clipShape(Circle())
+                        .shadow(color: Color.accentColor.opacity(0.4), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add goal")
+            }
+
+            if isLoading {
+                ProgressView().frame(maxWidth: .infinity)
+            } else if goals.isEmpty {
+                Text("No goals yet — tap + to add one")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 16)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(goals) { goal in
+                        GoalRow(goal: goal, currentBalance: child.balance) {
+                            Task { await deleteGoal(goal) }
+                        }
+                    }
+                }
+            }
+        }
+        .task { await loadGoals() }
+        .sheet(isPresented: $showAddGoal) {
+            AddGoalSheet(
+                childName: child.name,
+                onSave: { name, targetPoints in
+                    Task { await addGoal(name: name, targetPoints: targetPoints) }
+                    showAddGoal = false
+                },
+                onCancel: { showAddGoal = false }
+            )
+            .presentationDetents([.medium])
+        }
+        .alert("Couldn't save goal", isPresented: Binding(
+            get: { createGoalErrorMessage != nil },
+            set: { if !$0 { createGoalErrorMessage = nil } }
+        )) {
+            Button("OK") { createGoalErrorMessage = nil }
+        } message: {
+            Text(verbatim: createGoalErrorMessage ?? "")
+        }
+    }
+
+    private func loadGoals() async {
+        isLoading = true
+        if let fetched = try? await PointSystemService.fetchGoals(familyId: familyId, memberId: child.memberId) {
+            goals = fetched
+        }
+        isLoading = false
+    }
+
+    private func addGoal(name: String, targetPoints: Int) async {
+        do {
+            let goal = try await PointSystemService.createGoal(
+                familyId: familyId, memberId: child.memberId, name: name, targetPoints: targetPoints
+            )
+            goals.append(goal)
+        } catch {
+            createGoalErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteGoal(_ goal: PSGoal) async {
+        do {
+            try await PointSystemService.deleteGoal(familyId: familyId, goalId: goal.goalId)
+            goals.removeAll { $0.goalId == goal.goalId }
+        } catch {
+            // Server delete failed — keep item in list, user can retry
+        }
+    }
+}
+
+// MARK: - GoalRow
+
+private struct GoalRow: View {
+    let goal: PSGoal
+    let currentBalance: Int
+    let onDelete: () -> Void
+
+    private var progress: Double {
+        guard goal.targetPoints > 0 else { return 0 }
+        return min(1.0, Double(currentBalance) / Double(goal.targetPoints))
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text(verbatim: goal.name)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text("\(currentBalance)/\(goal.targetPoints)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(.systemGray5))
+                        .frame(height: PointSystemStyle.goalProgressHeight)
+                    Capsule().fill(Color.accentColor)
+                        .frame(width: geo.size.width * progress,
+                               height: PointSystemStyle.goalProgressHeight)
+                        .animation(.easeOut(duration: 0.6), value: progress)
+                }
+            }
+            .frame(height: PointSystemStyle.goalProgressHeight)
+        }
+        .padding(16)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(.systemGray4), lineWidth: 1))
+        .contextMenu {
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+}
+
+// MARK: - AddGoalSheet
+
+private struct AddGoalSheet: View {
+    let childName: String
+    let onSave: (String, Int) -> Void
+    let onCancel: () -> Void
+
+    @State private var name = ""
+    @State private var targetText = ""
+
+    private var targetPoints: Int? { Int(targetText).flatMap { $0 > 0 ? $0 : nil } }
+    private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty && targetPoints != nil }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Add Goal").font(.headline)
+                Spacer()
+                Button { onCancel() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color(.systemGray3))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
+
+            VStack(spacing: 12) {
+                TextField("Goal name (e.g. Screen Time)", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Target points", text: $targetText)
+                    .textFieldStyle(.roundedBorder)
+                    .keyboardType(.numberPad)
+            }
+            .padding(.horizontal, 20)
+
+            Spacer()
+
+            Button {
+                guard let pts = targetPoints else { return }
+                onSave(name.trimmingCharacters(in: .whitespaces), pts)
+            } label: {
+                Text("Save Goal")
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: PointSystemStyle.actionButtonHeight)
+                    .background(canSave ? Color.accentColor : Color(.systemGray4))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSave)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
+        }
+    }
+}
+
+// MARK: - ActivitySection
+
+private struct ActivitySection: View {
+    let child: PSChild
+    let familyId: Int
+    let onLogOut: () -> Void
+    let onBalanceChange: (Int) -> Void
+
+    @State private var activities: [PSActivity] = []
+    @State private var isLoading = false
+    @State private var navigateToRecord = false
+    private let pageSize = 5
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Activities")
+                .font(.system(size: PointSystemStyle.sectionHeaderFontSize, weight: .bold))
+
+            if isLoading && activities.isEmpty {
+                ProgressView().frame(maxWidth: .infinity)
+            } else if activities.isEmpty {
+                Text("No activity yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 16)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(activities.enumerated()), id: \.element.id) { index, activity in
+                        ActivityRow(activity: activity) {
+                            Task { await deleteActivity(activity) }
+                        }
+                        if index < activities.count - 1 {
+                            Divider().padding(.leading, 60)
+                        }
+                    }
+                }
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color(.systemGray4), lineWidth: 1))
+
+                Button {
+                    navigateToRecord = true
+                } label: {
+                    Text("View More")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor.opacity(0.4), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .task { await loadActivities() }
+        .navigationDestination(isPresented: $navigateToRecord) {
+            PointRecordView(child: child)
+        }
+    }
+
+    private func loadActivities() async {
+        isLoading = true
+        if let fetched = try? await PointSystemService.fetchActivities(
+            familyId: familyId, memberId: child.memberId, limit: pageSize
+        ) {
+            activities = fetched
+        }
+        isLoading = false
+    }
+
+    private func deleteActivity(_ activity: PSActivity) async {
+        do {
+            try await PointSystemService.deleteActivity(familyId: familyId, eventId: activity.eventId)
+            activities.removeAll { $0.eventId == activity.eventId }
+            let newBalance = child.balance - activity.delta
+            onBalanceChange(newBalance)
+        } catch {
+            // Server delete failed — keep item in list
+        }
+    }
+}
+
+// MARK: - ActivityRow
+
+private struct ActivityRow: View {
+    let activity: PSActivity
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(activity.isPositive ? Color.green.opacity(0.12) : Color.red.opacity(0.12))
+                .frame(width: PointSystemStyle.activityIconSize, height: PointSystemStyle.activityIconSize)
+                .overlay(
+                    Image(systemName: activity.isPositive ? "star.fill" : "minus")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(activity.isPositive ? .green : .red)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: activity.note ?? (activity.isPositive
+                    ? String(localized: "Points added")
+                    : String(localized: "Points deducted")))
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(verbatim: activity.eventDate)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(verbatim: activity.deltaText)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(activity.isPositive ? .green : .red)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contextMenu {
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+    }
+}
+
+// MARK: - Legacy (preserved for reuse)
 
 // MARK: - ChildTabBar
 
@@ -379,73 +920,5 @@ private struct ChildFullView: View {
         guard let date = Self.birthdayFormatter.date(from: birthday) else { return nil }
         let years = Calendar.current.dateComponents([.year], from: date, to: .now).year ?? 0
         return String(format: String(localized: "%d years old"), years)
-    }
-}
-
-// MARK: - Previews
-
-#Preview("Single child — boy") {
-    NavigationStack {
-        PointSystemView(membership: FamilyMembership(
-            familyId: 1, familyName: "杨家", memberId: 1,
-            displayName: "爸爸", roleKeywords: ["pointSystem"]
-        ))
-    }
-}
-
-#Preview("ChildFullView — boy, 1280 pts") {
-    NavigationStack {
-        ChildFullView(
-            child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                           birthday: "2022-03-15", balance: 1280),
-            familyId: 1,
-            onBalanceChange: { _ in },
-            onLogOut: {}
-        )
-    }
-}
-
-#Preview("ChildFullView — girl, 340 pts") {
-    NavigationStack {
-        ChildFullView(
-            child: PSChild(memberId: 2, name: "朵", gender: .girl,
-                           birthday: "2020-07-04", balance: 340),
-            familyId: 1,
-            onBalanceChange: { _ in },
-            onLogOut: {}
-        )
-    }
-}
-
-#Preview("ChildTabBar — 3 children") {
-    ChildTabBar(
-        children: [
-            PSChild(memberId: 1, name: "桅", gender: .boy, birthday: nil, balance: 0),
-            PSChild(memberId: 2, name: "朵", gender: .girl, birthday: nil, balance: 0),
-            PSChild(memberId: 3, name: "小明", gender: nil, birthday: nil, balance: 0),
-        ],
-        selectedIndex: .constant(0)
-    )
-}
-
-#Preview("中文") {
-    NavigationStack {
-        ChildFullView(
-            child: PSChild(memberId: 1, name: "桅", gender: .boy,
-                           birthday: "2022-03-15", balance: 1280),
-            familyId: 1,
-            onBalanceChange: { _ in },
-            onLogOut: {}
-        )
-    }
-    .environment(\.locale, .init(identifier: "zh-Hans"))
-}
-
-#Preview("Empty state") {
-    NavigationStack {
-        PointSystemView(membership: FamilyMembership(
-            familyId: 99, familyName: "Empty Family", memberId: 1,
-            displayName: "Dad", roleKeywords: ["pointSystem"]
-        ))
     }
 }
