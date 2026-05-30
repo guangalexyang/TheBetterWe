@@ -4,7 +4,9 @@ final class FeatureToggle {
     static let shared = FeatureToggle()
 
     // Add keys here as features are gated.
-    enum Key: CaseIterable {}
+    enum Key: CaseIterable {
+        case pointGoals
+    }
 
     private static let cacheKey = "feature_toggle_flags"
     private var flags: [String: Bool] = [:]
