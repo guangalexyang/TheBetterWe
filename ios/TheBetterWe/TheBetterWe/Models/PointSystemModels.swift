@@ -28,7 +28,7 @@ struct PSActivity: Identifiable, Decodable {
     let delta: Int
     let note: String?
     let eventDate: String   // "YYYY-MM-DD"
-    let createdAt: String   // ISO 8601
+    let createdAt: Int      // Unix epoch
 
     var id: Int { eventId }
 

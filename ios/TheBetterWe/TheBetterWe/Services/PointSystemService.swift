@@ -88,10 +88,13 @@ enum PointSystemService {
 
     static func fetchActivities(familyId: Int, memberId: Int, limit: Int = 20, offset: Int = 0) async throws -> [PSActivity] {
         let data = try await get(path: "/families/\(familyId)/point-system/members/\(memberId)/events?limit=\(limit)&offset=\(offset)")
-        guard let activities = try? JSONDecoder().decode([PSActivity].self, from: data) else {
+        print("[PointSystemService] fetchActivities raw: \(String(data: data, encoding: .utf8) ?? "<binary>")")
+        do {
+            return try JSONDecoder().decode([PSActivity].self, from: data)
+        } catch {
+            print("[PointSystemService] fetchActivities decode error: \(error)")
             throw PointSystemError.network
         }
-        return activities
     }
 
     static func deleteActivity(familyId: Int, eventId: Int) async throws {
@@ -140,7 +143,7 @@ enum PointSystemService {
         }
 
         guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: baseURL.appending(path: "/families/\(familyId)/point-system/parse-voice-command"))
+        var request = URLRequest(url: try url(for: "/families/\(familyId)/point-system/parse-voice-command"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -185,16 +188,21 @@ enum PointSystemService {
 
     // MARK: - Helpers
 
+    private static func url(for path: String) throws -> URL {
+        guard let url = URL(string: baseURL.absoluteString + path) else { throw PointSystemError.network }
+        return url
+    }
+
     private static func get(path: String) async throws -> Data {
         guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: baseURL.appending(path: path))
+        var request = URLRequest(url: try url(for: path))
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         return try await send(request, expectedStatus: 200)
     }
 
     private static func post<B: Encodable>(path: String, body: B, expectedStatus: Int) async throws -> Data {
         guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: baseURL.appending(path: path))
+        var request = URLRequest(url: try url(for: path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -204,7 +212,7 @@ enum PointSystemService {
 
     private static func delete(path: String) async throws {
         guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: baseURL.appending(path: path))
+        var request = URLRequest(url: try url(for: path))
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         _ = try await send(request, expectedStatus: 204)
@@ -215,9 +223,13 @@ enum PointSystemService {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
+            print("[PointSystemService] network failure: \(error)")
             throw PointSystemError.network
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status != expectedStatus {
+            print("[PointSystemService] HTTP \(status) for \(request.url?.path ?? "?"): \(String(data: data, encoding: .utf8) ?? "<binary>")")
+        }
         if status == 401 { throw PointSystemError.unauthorized }
         guard status == expectedStatus else { throw PointSystemError.network }
         return data

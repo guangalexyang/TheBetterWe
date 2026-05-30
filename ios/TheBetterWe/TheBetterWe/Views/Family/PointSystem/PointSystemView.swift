@@ -39,26 +39,23 @@ struct PointSystemView: View {
                         )
                         .id(child.id)
 
-                        if FeatureToggle.isActive(.pointGoals) {
-                            GoalProgressSection(
-                                child: child,
-                                familyId: membership.familyId,
-                                onLogOut: onLogOut
-                            )
-                            .id("goals-\(child.id)")
-                        }
+                        GoalProgressSection(
+                            child: child,
+                            familyId: membership.familyId,
+                            onLogOut: onLogOut
+                        )
+                        .id("goals-\(child.id)")
 
                         ActivitySection(
                             child: child,
                             familyId: membership.familyId,
-                            onLogOut: onLogOut,
                             onBalanceChange: { newBalance in
                                 if let idx = children.firstIndex(where: { $0.memberId == child.memberId }) {
                                     children[idx].balance = newBalance
                                 }
                             }
                         )
-                        .id("activity-\(child.id)")
+                        .id("activity-\(child.id)-\(child.balance)")
                     }
                 }
             }
@@ -328,8 +325,7 @@ private struct GoalProgressSection: View {
 
     @State private var goals: [PSGoal] = []
     @State private var isLoading = false
-    @State private var showAddGoal = false
-    @State private var createGoalErrorMessage: String? = nil
+    @State private var showComingSoon = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -338,7 +334,7 @@ private struct GoalProgressSection: View {
                     .font(.system(size: PointSystemStyle.sectionHeaderFontSize, weight: .bold))
                 Spacer()
                 Button {
-                    showAddGoal = true
+                    showComingSoon = true
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .semibold))
@@ -355,7 +351,7 @@ private struct GoalProgressSection: View {
             if isLoading {
                 ProgressView().frame(maxWidth: .infinity)
             } else if goals.isEmpty {
-                Text("No goals yet — tap + to add one")
+                Text("Create your first goal")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -371,24 +367,8 @@ private struct GoalProgressSection: View {
             }
         }
         .task { await loadGoals() }
-        .sheet(isPresented: $showAddGoal) {
-            AddGoalSheet(
-                childName: child.name,
-                onSave: { name, targetPoints in
-                    Task { await addGoal(name: name, targetPoints: targetPoints) }
-                    showAddGoal = false
-                },
-                onCancel: { showAddGoal = false }
-            )
-            .presentationDetents([.medium])
-        }
-        .alert("Couldn't save goal", isPresented: Binding(
-            get: { createGoalErrorMessage != nil },
-            set: { if !$0 { createGoalErrorMessage = nil } }
-        )) {
-            Button("OK") { createGoalErrorMessage = nil }
-        } message: {
-            Text(verbatim: createGoalErrorMessage ?? "")
+        .sheet(isPresented: $showComingSoon) {
+            ComingSoonView { showComingSoon = false }
         }
     }
 
@@ -398,17 +378,6 @@ private struct GoalProgressSection: View {
             goals = fetched
         }
         isLoading = false
-    }
-
-    private func addGoal(name: String, targetPoints: Int) async {
-        do {
-            let goal = try await PointSystemService.createGoal(
-                familyId: familyId, memberId: child.memberId, name: name, targetPoints: targetPoints
-            )
-            goals.append(goal)
-        } catch {
-            createGoalErrorMessage = error.localizedDescription
-        }
     }
 
     private func deleteGoal(_ goal: PSGoal) async {
@@ -464,6 +433,29 @@ private struct GoalRow: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+    }
+}
+
+// MARK: - ComingSoonView
+
+private struct ComingSoonView: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Image(systemName: "sparkles")
+                .font(.system(size: 48))
+                .foregroundStyle(Color.accentColor)
+            Text("Coming Soon")
+                .font(.title2.weight(.bold))
+            Button("Got It") { onDismiss() }
+                .buttonStyle(.borderedProminent)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -535,12 +527,13 @@ private struct AddGoalSheet: View {
 private struct ActivitySection: View {
     let child: PSChild
     let familyId: Int
-    let onLogOut: () -> Void
     let onBalanceChange: (Int) -> Void
 
     @State private var activities: [PSActivity] = []
     @State private var isLoading = false
-    @State private var navigateToRecord = false
+    @State private var isLoadingMore = false
+    @State private var hasMore = false
+    @State private var loadError: String? = nil
     private let pageSize = 5
 
     var body: some View {
@@ -550,6 +543,12 @@ private struct ActivitySection: View {
 
             if isLoading && activities.isEmpty {
                 ProgressView().frame(maxWidth: .infinity)
+            } else if let err = loadError {
+                Text(verbatim: err)
+                    .font(.subheadline)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 16)
             } else if activities.isEmpty {
                 Text("No activity yet")
                     .font(.subheadline)
@@ -571,33 +570,59 @@ private struct ActivitySection: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color(.systemGray4), lineWidth: 1))
 
-                Button {
-                    navigateToRecord = true
-                } label: {
-                    Text("View More")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.accentColor)
+                if hasMore {
+                    Button {
+                        Task { await loadMore() }
+                    } label: {
+                        Group {
+                            if isLoadingMore {
+                                ProgressView()
+                            } else {
+                                Text("More")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                        }
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
                         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor.opacity(0.4), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLoadingMore)
                 }
-                .buttonStyle(.plain)
             }
         }
         .task { await loadActivities() }
-        .navigationDestination(isPresented: $navigateToRecord) {
-            PointRecordView(child: child)
-        }
     }
 
     private func loadActivities() async {
         isLoading = true
-        if let fetched = try? await PointSystemService.fetchActivities(
-            familyId: familyId, memberId: child.memberId, limit: pageSize
-        ) {
+        loadError = nil
+        do {
+            let fetched = try await PointSystemService.fetchActivities(
+                familyId: familyId, memberId: child.memberId, limit: pageSize, offset: 0
+            )
             activities = fetched
+            hasMore = fetched.count == pageSize
+        } catch {
+            loadError = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private func loadMore() async {
+        guard !isLoadingMore else { return }
+        isLoadingMore = true
+        do {
+            let fetched = try await PointSystemService.fetchActivities(
+                familyId: familyId, memberId: child.memberId, limit: pageSize, offset: activities.count
+            )
+            activities.append(contentsOf: fetched)
+            hasMore = fetched.count == pageSize
+        } catch {
+            // Keep existing entries on load-more failure
+        }
+        isLoadingMore = false
     }
 
     private func deleteActivity(_ activity: PSActivity) async {
