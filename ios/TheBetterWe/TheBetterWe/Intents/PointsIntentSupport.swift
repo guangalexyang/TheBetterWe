@@ -13,7 +13,7 @@ enum PointsIntentError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notLoggedIn:    return String(localized: "Please log in to TheBetterWe first.")
+        case .notLoggedIn:    return String(localized: "Please log in.")
         case .notParent:      return String(localized: "Only parents can adjust points.")
         case .notInFamily:    return String(localized: "You haven't joined a family yet. Please open TheBetterWe.")
         case .childNotFound:  return String(localized: "Couldn't find that child. Please open TheBetterWe.")

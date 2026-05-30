@@ -261,35 +261,3 @@ struct PointAdjustFormView: View {
     }
 }
 
-// MARK: - Previews
-
-#Preview("Add Points — EN") {
-    PointAdjustFormView(
-        style: .add,
-        familyId: 1,
-        memberId: 1,
-        onSuccess: { _ in },
-        onLogOut: {}
-    )
-}
-
-#Preview("Deduct Points — EN") {
-    PointAdjustFormView(
-        style: .deduct,
-        familyId: 1,
-        memberId: 1,
-        onSuccess: { _ in },
-        onLogOut: {}
-    )
-}
-
-#Preview("中文") {
-    PointAdjustFormView(
-        style: .add,
-        familyId: 1,
-        memberId: 1,
-        onSuccess: { _ in },
-        onLogOut: {}
-    )
-    .environment(\.locale, .init(identifier: "zh-Hans"))
-}
