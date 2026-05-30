@@ -8,6 +8,7 @@ struct PointAdjustFormView: View {
     let memberId: Int
     let onSuccess: (Int) -> Void
     let onLogOut: () -> Void
+    var onDismiss: (() -> Void)? = nil   // nil = not in sheet mode
 
     @State private var points: Int = 2
     @State private var pointsText: String = "2"
@@ -19,6 +20,9 @@ struct PointAdjustFormView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let dismiss = onDismiss {
+                sheetHeader(dismiss: dismiss)
+            }
             stepperArea
             noteField
                 .padding(.horizontal, PointSystemStyle.formHPadding)
@@ -31,6 +35,30 @@ struct PointAdjustFormView: View {
                 .padding(.bottom, PointSystemStyle.formVPadding)
         }
         .background(Color(.systemGray6))
+    }
+
+    @ViewBuilder
+    private func sheetHeader(dismiss: @escaping () -> Void) -> some View {
+        HStack {
+            Text(style.confirmLabel)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Spacer()
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(Color(.systemGray3))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+        }
+        .padding(.horizontal, PointSystemStyle.formHPadding)
+        .padding(.top, 20)
+        .padding(.bottom, 8)
     }
 
     // MARK: Stepper
