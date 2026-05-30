@@ -56,7 +56,6 @@ enum PointSystemStyle {
     static let sectionHeaderFontSize: CGFloat = 20
     static let activityIconSize: CGFloat = 40
     static let goalProgressHeight: CGFloat = 16
-    static let goalProgressCornerRadius: CGFloat = 8
 }
 
 // MARK: - ActionStyle

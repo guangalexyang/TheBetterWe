@@ -51,7 +51,12 @@ struct PointSystemView: View {
                         ActivitySection(
                             child: child,
                             familyId: membership.familyId,
-                            onLogOut: onLogOut
+                            onLogOut: onLogOut,
+                            onBalanceChange: { newBalance in
+                                if let idx = children.firstIndex(where: { $0.memberId == child.memberId }) {
+                                    children[idx].balance = newBalance
+                                }
+                            }
                         )
                         .id("activity-\(child.id)")
                     }
@@ -324,6 +329,7 @@ private struct GoalProgressSection: View {
     @State private var goals: [PSGoal] = []
     @State private var isLoading = false
     @State private var showAddGoal = false
+    @State private var createGoalErrorMessage: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -376,6 +382,14 @@ private struct GoalProgressSection: View {
             )
             .presentationDetents([.medium])
         }
+        .alert("Couldn't save goal", isPresented: Binding(
+            get: { createGoalErrorMessage != nil },
+            set: { if !$0 { createGoalErrorMessage = nil } }
+        )) {
+            Button("OK") { createGoalErrorMessage = nil }
+        } message: {
+            Text(verbatim: createGoalErrorMessage ?? "")
+        }
     }
 
     private func loadGoals() async {
@@ -387,10 +401,13 @@ private struct GoalProgressSection: View {
     }
 
     private func addGoal(name: String, targetPoints: Int) async {
-        if let goal = try? await PointSystemService.createGoal(
-            familyId: familyId, memberId: child.memberId, name: name, targetPoints: targetPoints
-        ) {
+        do {
+            let goal = try await PointSystemService.createGoal(
+                familyId: familyId, memberId: child.memberId, name: name, targetPoints: targetPoints
+            )
             goals.append(goal)
+        } catch {
+            createGoalErrorMessage = error.localizedDescription
         }
     }
 
@@ -519,6 +536,7 @@ private struct ActivitySection: View {
     let child: PSChild
     let familyId: Int
     let onLogOut: () -> Void
+    let onBalanceChange: (Int) -> Void
 
     @State private var activities: [PSActivity] = []
     @State private var isLoading = false
@@ -586,6 +604,8 @@ private struct ActivitySection: View {
         do {
             try await PointSystemService.deleteActivity(familyId: familyId, eventId: activity.eventId)
             activities.removeAll { $0.eventId == activity.eventId }
+            let newBalance = child.balance - activity.delta
+            onBalanceChange(newBalance)
         } catch {
             // Server delete failed — keep item in list
         }
