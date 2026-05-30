@@ -62,9 +62,9 @@ OrderFromMe and RewardMe may exist as separate web apps with their own hosting/U
 
 ## Feature Toggle System
 
-Every new feature must be behind a toggle. Toggles are served by the backend via `GET /config/feature-flags` and fetched by the iOS app on every launch.
+Every new feature must be behind a toggle. Toggles are served by the backend via `GET /config/feature-toggles` and fetched by the iOS app on every launch.
 
-- Server holds a `feature_flags.json` (or in-memory config) — edit server-side to enable/disable without a new app release
+- Server config is in-memory in `server/src/routes/featureToggles.ts` — edit and redeploy to enable/disable without a new app release
 - iOS caches the last successful response locally; uses the cache if the server is unreachable
 - If never fetched before and offline, all toggles default to **off**
 - This allows shipping client code with a toggle off, then enabling it from the server when ready
@@ -96,27 +96,42 @@ TheBetterWe/
 │   ├── TheBetterWe.xcodeproj
 │   └── TheBetterWe/
 │       ├── App/                # Entry point, config, feature flag loader
-│       ├── Models/             # SwiftData models (local DB)
+│       ├── Models/             # SwiftData + API response models
 │       ├── Views/              # SwiftUI views, grouped by feature
 │       ├── ViewModels/         # @Observable view models
 │       ├── Services/           # API client, sync engine
-│       ├── Intents/            # App Intents (Siri)
+│       ├── Intents/            # App Intents (Siri — AddPointsIntent, DeductPointsIntent)
 │       └── Resources/          # Assets, .xcstrings (en/zh)
 │
 └── server/                     # Node.js + Express + TypeScript
     ├── src/
-    │   ├── routes/             # Express route definitions
-    │   ├── controllers/        # Request handlers / business logic
-    │   ├── models/             # DB query functions (per table)
+    │   ├── routes/             # Express route definitions + request handlers
+    │   ├── db/                 # pg.Pool singleton
     │   ├── middleware/         # Auth, error handling, logging
     │   └── services/           # External integrations (OrderFromMe, RewardMe etc.)
     ├── migrations/             # node-pg-migrate numbered migration files
     ├── Dockerfile              # fly.io container build
     ├── fly.toml                # fly.io deployment config
-    ├── feature_flags.json      # Server-side toggle config, edit to enable/disable features
     ├── package.json
     └── .env.example
 ```
+
+## Technical Patterns & Gotchas
+
+### iOS — Networking
+- **URL construction with query params:** Never use `URL.appending(path:)` when the path contains `?` — it percent-encodes `?` as `%3F`, breaking Express routing. Always use `URL(string: baseURL.absoluteString + path)`.
+- **Error handling in service calls:** Never use `try?` on async API calls in views. Use `do-catch` and store the error in a `@State var loadError: String?` to surface it in the UI. Silent failures show empty state with no diagnostic.
+- **ActivitySection reload:** Use `.id("key-\(child.balance)")` to force a view identity change (and `.task` re-fire) after a balance update.
+
+### iOS — Models
+- All PostgreSQL timestamp columns are `INTEGER` (Unix epoch via `EXTRACT(EPOCH FROM NOW())::INTEGER`). Decode as `Int`, never `String`.
+- `PSActivity.createdAt: Int`, not `String`.
+
+### Server
+- All new tables must use `INTEGER` epoch timestamps, not `timestamptz`.
+- Always guard `parseInt` params with a NaN check (`parseIntParam` helper) and return 400 before running SQL.
+- `pg.Pool` requires `.on('error', ...)` handler — idle client errors without it crash the process.
+- Feature toggles live in `src/routes/featureToggles.ts` (in-memory object). No JSON file.
 
 ## UI
 
@@ -124,9 +139,12 @@ Build UI **view by view** — never scaffold multiple views at once without user
 
 ## Development Phases
 
-1. **Phase 1 (current)** — iOS app + Node/Express server + PostgreSQL; user auth, family setup, Point System (kids + rules + points + redemptions), personal + family TODOs/Done, Highlight of the Day
+1. **Phase 1 (current)** — iOS app + Node/Express server + PostgreSQL; user auth, family setup, Point System (kids + rules + points + redemptions + goals), personal + family TODOs/Done, Highlight of the Day
+   - ✅ Backend deployed to fly.io — `https://thebetterwe-api.fly.dev`
+   - ✅ Siri App Intents — AddPointsIntent + DeductPointsIntent (Chinese + English phrases)
+   - ✅ App display name: **诺米** (`INFOPLIST_KEY_CFBundleDisplayName` in pbxproj)
+   - 🔄 Point System goals workflow in progress
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
 3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
-4. **Phase 4** — Siri / App Intents; Doubao API
+4. **Phase 4** — Doubao API (in-app natural language point recording)
 5. **Phase 5** — Apple Watch companion
-6. **Phase 6 (complete)** — Backend deployed to fly.io with PostgreSQL (`https://thebetterwe-api.fly.dev`)
