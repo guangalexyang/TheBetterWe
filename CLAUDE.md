@@ -123,6 +123,13 @@ TheBetterWe/
 - **Error handling in service calls:** Never use `try?` on async API calls in views. Use `do-catch` and store the error in a `@State var loadError: String?` to surface it in the UI. Silent failures show empty state with no diagnostic.
 - **ActivitySection reload:** Use `.id("key-\(child.balance)")` to force a view identity change (and `.task` re-fire) after a balance update.
 
+### iOS — Sheets & Presentation
+- **Sheet height:** Use `.presentationDetents([.height(X)])` with a calculated pixel value. `.medium` (~50% screen) is almost always too short; `.large` wastes space. Estimate: header ~70pt + fields ~70pt each + footer ~96pt + spacing.
+- **Dynamic sheet height:** Two detents + `@Binding var detent: PresentationDetent` passed into the sheet. Reset to small detent `onDismiss`. Example: `.height(510)` ↔ `.height(730)` driven by `onChange(of:)` inside the sheet.
+- **DatePicker compact in sheets:** Always add `.fixedSize()` to `DatePicker(.compact)` — without it the picker's intrinsic width inflates the parent layout and can widen the sheet.
+- **GeometryReader in .background():** Never use `GeometryReader` inside `.background()` on any view that contains a `TextField`. It creates UIKit Auto Layout views that conflict with the keyboard's internal constraints, producing `UIViewAlertForUnsatisfiableConstraints` on every tap.
+- **lineLimit ternary:** `.lineLimit(isX ? 1...5 : 1)` is a type error. Use `.lineLimit(isX ? 1...5 : 1...1)` — both branches must be `ClosedRange<Int>`.
+
 ### iOS — Models
 - All PostgreSQL timestamp columns are `INTEGER` (Unix epoch via `EXTRACT(EPOCH FROM NOW())::INTEGER`). Decode as `Int`, never `String`.
 - `PSActivity.createdAt: Int`, not `String`.
