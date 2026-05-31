@@ -325,7 +325,8 @@ private struct GoalProgressSection: View {
 
     @State private var goals: [PSGoal] = []
     @State private var isLoading = false
-    @State private var showComingSoon = false
+    @State private var showCreateGoal = false
+    @State private var goalSheetDetent: PresentationDetent = .height(510)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -334,7 +335,7 @@ private struct GoalProgressSection: View {
                     .font(.system(size: PointSystemStyle.sectionHeaderFontSize, weight: .bold))
                 Spacer()
                 Button {
-                    showComingSoon = true
+                    showCreateGoal = true
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .semibold))
@@ -367,8 +368,20 @@ private struct GoalProgressSection: View {
             }
         }
         .task { await loadGoals() }
-        .sheet(isPresented: $showComingSoon) {
-            ComingSoonView { showComingSoon = false }
+        .sheet(isPresented: $showCreateGoal, onDismiss: { goalSheetDetent = .height(510) }) {
+            CreateGoalSheet(
+                familyId: familyId,
+                memberId: child.memberId,
+                detent: $goalSheetDetent,
+                onSuccess: { goal in
+                    goals.append(goal)
+                    showCreateGoal = false
+                },
+                onCancel: { showCreateGoal = false },
+                onLogOut: onLogOut
+            )
+            .presentationDetents([.height(510), .height(730)], selection: $goalSheetDetent)
+            .presentationDragIndicator(.visible)
         }
     }
 
@@ -436,88 +449,314 @@ private struct GoalRow: View {
     }
 }
 
-// MARK: - ComingSoonView
+// MARK: - GoalLifespan
 
-private struct ComingSoonView: View {
-    let onDismiss: () -> Void
+private enum GoalLifespan: CaseIterable, Hashable {
+    case daily, weekly, monthly, oneTime
 
-    var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            Image(systemName: "sparkles")
-                .font(.system(size: 48))
-                .foregroundStyle(Color.accentColor)
-            Text("Coming Soon")
-                .font(.title2.weight(.bold))
-            Button("Got It") { onDismiss() }
-                .buttonStyle(.borderedProminent)
-            Spacer()
+    var label: LocalizedStringKey {
+        switch self {
+        case .daily:   return "Daily"
+        case .weekly:  return "Weekly"
+        case .monthly: return "Monthly"
+        case .oneTime: return "One-time"
         }
-        .frame(maxWidth: .infinity)
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.visible)
+    }
+
+    var icon: String {
+        switch self {
+        case .daily:   return "sun.horizon"
+        case .weekly:  return "calendar"
+        case .monthly: return "calendar.badge.clock"
+        case .oneTime: return "calendar.badge.checkmark"
+        }
     }
 }
 
-// MARK: - AddGoalSheet
+// MARK: - CreateGoalSheet
 
-private struct AddGoalSheet: View {
-    let childName: String
-    let onSave: (String, Int) -> Void
+private struct CreateGoalSheet: View {
+    let familyId: Int
+    let memberId: Int
+    @Binding var detent: PresentationDetent
+    let onSuccess: (PSGoal) -> Void
     let onCancel: () -> Void
+    let onLogOut: () -> Void
 
     @State private var name = ""
     @State private var targetText = ""
+    @State private var selectedLifespan: GoalLifespan? = nil
+    @State private var startDate = Date()
+    @State private var startTime = Date()
+    @State private var endDate = Calendar.current.date(byAdding: .day, value: 7, to: Date()) ?? Date()
+    @State private var endTime = Date()
+    @State private var isCreating = false
+    @State private var errorMessage: String? = nil
 
     private var targetPoints: Int? { Int(targetText).flatMap { $0 > 0 ? $0 : nil } }
-    private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty && targetPoints != nil }
+    private var canSave: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && targetPoints != nil
+    }
+
+    private static let cr: CGFloat        = PointSystemStyle.formConfirmCornerRadius
+    private static let fieldBg            = Color(red: 245/255, green: 242/255, blue: 254/255)
+    private static let borderColor        = Color(red: 199/255, green: 196/255, blue: 215/255)
+    private static let labelColor         = Color(red: 118/255, green: 117/255, blue: 134/255)
 
     var body: some View {
         VStack(spacing: 0) {
+            sheetHeader
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    descriptionField
+                    targetField
+                    lifespanSection
+                    if selectedLifespan == .oneTime {
+                        oneTimeSection
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 32)
+                .animation(.easeInOut(duration: 0.3), value: selectedLifespan)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            sheetFooter
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground))
+        .onChange(of: selectedLifespan) { _, lifespan in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                detent = lifespan == .oneTime ? .height(730) : .height(510)
+            }
+        }
+    }
+
+    // MARK: Header
+
+    private var sheetHeader: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Color(.systemGray4))
+                .frame(width: 36, height: 4)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
             HStack {
-                Text("Add Goal").font(.headline)
+                Text("Create New Goal")
+                    .font(.headline.weight(.bold))
                 Spacer()
                 Button { onCancel() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color(.systemGray3))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(.systemGray))
+                        .frame(width: 28, height: 28)
+                        .background(Color(.systemGray5))
+                        .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Close")
             }
             .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
+            .padding(.bottom, 12)
+            Divider()
+        }
+    }
 
-            VStack(spacing: 12) {
-                TextField("Goal name (e.g. Screen Time)", text: $name)
-                    .textFieldStyle(.roundedBorder)
-                TextField("Target points", text: $targetText)
-                    .textFieldStyle(.roundedBorder)
-                    .keyboardType(.numberPad)
+    // MARK: Input fields
+
+    private var descriptionField: some View {
+        fieldSection(label: "Goal Description") {
+            HStack {
+                TextField("e.g., Hike on weekends, Watch TV at night", text: $name)
+                    .font(.body)
+                Image(systemName: "pencil")
+                    .font(.system(size: 15, weight: .light))
+                    .foregroundStyle(Self.borderColor)
             }
-            .padding(.horizontal, 20)
+        }
+    }
 
-            Spacer()
+    private var targetField: some View {
+        fieldSection(label: "Goal Target") {
+            HStack {
+                TextField("e.g., 500 points", text: $targetText)
+                    .font(.body)
+                    .keyboardType(.numberPad)
+                    .onChange(of: targetText) { _, new in
+                        let filtered = new.filter(\.isNumber)
+                        if filtered != new { targetText = filtered }
+                    }
+                Image(systemName: "star")
+                    .font(.system(size: 15, weight: .light))
+                    .foregroundStyle(Self.borderColor)
+            }
+        }
+    }
 
-            Button {
-                guard let pts = targetPoints else { return }
-                onSave(name.trimmingCharacters(in: .whitespaces), pts)
-            } label: {
-                Text("Save Goal")
-                    .font(.body.weight(.semibold))
+    @ViewBuilder
+    private func fieldSection<Content: View>(
+        label: LocalizedStringKey,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            fieldLabel(label)
+            content()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(Self.fieldBg)
+                .clipShape(RoundedRectangle(cornerRadius: Self.cr))
+                .overlay(RoundedRectangle(cornerRadius: Self.cr).stroke(Self.borderColor, lineWidth: 1))
+        }
+    }
+
+    private func fieldLabel(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Self.labelColor)
+            .kerning(0.5)
+            .textCase(.uppercase)
+    }
+
+    // MARK: Lifespan
+
+    private var lifespanSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            fieldLabel("Goal Lifespan")
+            HStack(spacing: 8) {
+                ForEach(GoalLifespan.allCases, id: \.self) { lifespan in
+                    lifespanButton(lifespan)
+                }
+            }
+        }
+    }
+
+    private func lifespanButton(_ lifespan: GoalLifespan) -> some View {
+        let isSelected = selectedLifespan == lifespan
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedLifespan = isSelected ? nil : lifespan
+            }
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: lifespan.icon)
+                    .font(.system(size: 20))
+                Text(lifespan.label)
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .foregroundStyle(isSelected ? .white : Self.labelColor)
+            .background(isSelected ? Color.accentColor : Self.fieldBg)
+            .clipShape(RoundedRectangle(cornerRadius: Self.cr))
+            .overlay {
+                if !isSelected {
+                    RoundedRectangle(cornerRadius: Self.cr).stroke(Self.borderColor, lineWidth: 1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: One-time section
+
+    private var oneTimeSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            dateGroup(label: "Starts", date: $startDate, time: $startTime)
+            dateGroup(label: "Ends",   date: $endDate,   time: $endTime)
+        }
+        .padding(16)
+        .background(Self.fieldBg)
+        .clipShape(RoundedRectangle(cornerRadius: Self.cr))
+        .overlay(RoundedRectangle(cornerRadius: Self.cr).stroke(Self.borderColor, lineWidth: 1))
+    }
+
+    private func dateGroup(label: LocalizedStringKey, date: Binding<Date>, time: Binding<Date>) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            fieldLabel(label)
+            HStack(spacing: 10) {
+                datePickerField(date, components: .date,          icon: "calendar")
+                datePickerField(time, components: .hourAndMinute, icon: "clock")
+            }
+        }
+    }
+
+    private func datePickerField(_ binding: Binding<Date>, components: DatePickerComponents, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(Self.labelColor)
+            DatePicker("", selection: binding, displayedComponents: components)
+                .datePickerStyle(.compact)
+                .labelsHidden()
+                .tint(Color.accentColor)
+                .fixedSize()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: Self.cr))
+        .overlay(RoundedRectangle(cornerRadius: Self.cr).stroke(Self.borderColor, lineWidth: 1))
+    }
+
+    // MARK: Footer
+
+    private var sheetFooter: some View {
+        VStack(spacing: 0) {
+            Divider()
+            VStack(spacing: 8) {
+                Button { save() } label: {
+                    Group {
+                        if isCreating {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text("Create Goal")
+                                .font(.body.weight(.bold))
+                        }
+                    }
                     .frame(maxWidth: .infinity)
-                    .frame(height: PointSystemStyle.actionButtonHeight)
+                    .frame(height: 56)
                     .background(canSave ? Color.accentColor : Color(.systemGray4))
                     .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .clipShape(RoundedRectangle(cornerRadius: Self.cr))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave || isCreating)
+
+                if let msg = errorMessage {
+                    Text(verbatim: msg)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(!canSave)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 24)
+            .padding(20)
+        }
+        .background(Color(.systemBackground))
+    }
+
+    // MARK: Save
+
+    private func save() {
+        guard let pts = targetPoints, !isCreating else { return }
+        isCreating = true
+        errorMessage = nil
+        Task {
+            do {
+                let goal = try await PointSystemService.createGoal(
+                    familyId: familyId,
+                    memberId: memberId,
+                    name: name.trimmingCharacters(in: .whitespaces),
+                    targetPoints: pts
+                )
+                isCreating = false
+                onSuccess(goal)
+            } catch PointSystemError.unauthorized {
+                isCreating = false
+                onLogOut()
+            } catch {
+                isCreating = false
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }
