@@ -38,7 +38,8 @@ struct DeductPointsIntent: AppIntent {
             familyId: membership.familyId,
             memberId: child.memberId,
             delta: -amount,
-            note: note
+            note: note,
+            date: localDateString()
         )
 
         // 5. Success dialog

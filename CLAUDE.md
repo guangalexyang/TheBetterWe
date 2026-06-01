@@ -133,9 +133,14 @@ TheBetterWe/
 ### iOS — Models
 - All PostgreSQL timestamp columns are `INTEGER` (Unix epoch via `EXTRACT(EPOCH FROM NOW())::INTEGER`). Decode as `Int`, never `String`.
 - `PSActivity.createdAt: Int`, not `String`.
+- **Date-only display:** Use `setLocalizedDateFormatFromTemplate("MMMd")` (or `"MMMdyyyy"` for cross-year dates) for all user-facing date strings — it automatically adds locale-specific suffixes like "日" in Chinese. Never hardcode `dateFormat = "MMM d"`.
+- **Timezone-correct period queries:** iOS must send the device's local date as `?localDate=YYYY-MM-DD` on any request whose result depends on "today / this week / this month". Use `localDateString()` (defined in `PointSystemService.swift`) for this. Also pass `date: localDateString()` in POST bodies for event records so `event_date` stores device local date.
 
 ### Server
 - All new tables must use `INTEGER` epoch timestamps, not `timestamptz`.
+- **Exception — date-only columns:** Store date-only values (goal start/end dates, event dates) as `TEXT` YYYY-MM-DD, not `INTEGER` epoch. `TO_TIMESTAMP(epoch)::DATE` uses UTC timezone, causing an off-by-one day for UTC+ users. TEXT strings cast directly: `column::DATE`.
+- **PostgreSQL `SUM()` returns `BIGINT`:** node-postgres serializes BIGINT as a JavaScript string. Always cast `SUM(col)::INTEGER` and `COALESCE(SUM(col), 0)::INTEGER` for any aggregate destined for an iOS `Int` field. Silent decode failure looks identical to an empty result.
+- **Timezone-correct period windows:** Accept `req.query.localDate` (YYYY-MM-DD), validate with a `validDate()` helper, and use `COALESCE($n::DATE, CURRENT_DATE)` in SQL. `DATE_TRUNC('week', ...)` in PostgreSQL uses ISO 8601 (Monday start).
 - Always guard `parseInt` params with a NaN check (`parseIntParam` helper) and return 400 before running SQL.
 - `pg.Pool` requires `.on('error', ...)` handler — idle client errors without it crash the process.
 - Feature toggles live in `src/routes/featureToggles.ts` (in-memory object). No JSON file.
@@ -150,7 +155,7 @@ Build UI **view by view** — never scaffold multiple views at once without user
    - ✅ Backend deployed to fly.io — `https://thebetterwe-api.fly.dev`
    - ✅ Siri App Intents — AddPointsIntent + DeductPointsIntent (Chinese + English phrases)
    - ✅ App display name: **诺米** (`INFOPLIST_KEY_CFBundleDisplayName` in pbxproj)
-   - 🔄 Point System goals workflow in progress
+   - ✅ Point System goals — create, lifespan (daily/weekly/monthly/one-time), period progress, fulfilled UI
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
 3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
 4. **Phase 4** — Doubao API (in-app natural language point recording)

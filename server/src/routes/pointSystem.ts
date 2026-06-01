@@ -395,6 +395,8 @@ router.get('/:familyId/point-system/members/:memberId/goals', async (req: Reques
   const familyId = parseIntParam(req.params.familyId);
   const memberId = parseIntParam(req.params.memberId);
   const userId = req.auth!.sub;
+  const localDateRaw = req.query.localDate as string | undefined;
+  const localDate = localDateRaw && /^\d{4}-\d{2}-\d{2}$/.test(localDateRaw) ? localDateRaw : null;
 
   if (familyId === null || memberId === null) {
     res.status(400).json({ error: 'invalid id' });
@@ -421,17 +423,34 @@ router.get('/:familyId/point-system/members/:memberId/goals', async (req: Reques
     return;
   }
 
+  // $3 = client's local date (YYYY-MM-DD); falls back to server CURRENT_DATE if not provided
   const rows = (await pool.query(
     `SELECT
       pg.id             AS "goalId",
       pg.member_id      AS "memberId",
       pg.name,
-      pg.target_points  AS "targetPoints"
+      pg.target_points  AS "targetPoints",
+      pg.lifespan,
+      pg.start_date     AS "startDate",
+      pg.end_date       AS "endDate",
+      COALESCE((
+        SELECT SUM(pe.delta)::INTEGER
+        FROM point_events pe
+        WHERE pe.member_id = pg.member_id
+          AND pe.event_date >= CASE pg.lifespan
+            WHEN 'daily'    THEN COALESCE($3::DATE, CURRENT_DATE)
+            WHEN 'weekly'   THEN DATE_TRUNC('week', COALESCE($3::DATE, CURRENT_DATE))::DATE
+            WHEN 'monthly'  THEN DATE_TRUNC('month', COALESCE($3::DATE, CURRENT_DATE))::DATE
+            WHEN 'one_time' THEN COALESCE(pg.start_date::DATE, DATE '1970-01-01')
+            ELSE COALESCE($3::DATE, CURRENT_DATE)
+          END
+          AND (pg.lifespan != 'one_time' OR pe.event_date <= COALESCE(pg.end_date::DATE, COALESCE($3::DATE, CURRENT_DATE)))
+      ), 0)::INTEGER AS "periodProgress"
     FROM point_goals pg
     JOIN family_members fm ON fm.id = pg.member_id
     WHERE pg.member_id = $1 AND fm.family_id = $2
     ORDER BY pg.created_at ASC`,
-    [memberId, familyId]
+    [memberId, familyId, localDate]
   )).rows;
 
   res.json(rows);
@@ -441,11 +460,19 @@ router.get('/:familyId/point-system/members/:memberId/goals', async (req: Reques
 router.post('/:familyId/point-system/goals', async (req: Request, res: Response) => {
   const familyId = parseIntParam(req.params.familyId);
   const userId = req.auth!.sub;
-  const { memberId, name, targetPoints } = req.body as {
+  const { memberId, name, targetPoints, lifespan, startDate, endDate, localDate } = req.body as {
     memberId?: number;
     name?: string;
     targetPoints?: number;
+    lifespan?: string;
+    startDate?: string;
+    endDate?: string;
+    localDate?: string;
   };
+  const safeLocalDate = typeof localDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(localDate) ? localDate : null;
+  const validDate = (d: unknown): d is string => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+
+  const validLifespans = ['daily', 'weekly', 'monthly', 'one_time'];
 
   if (familyId === null) {
     res.status(400).json({ error: 'invalid id' });
@@ -463,7 +490,9 @@ router.post('/:familyId/point-system/goals', async (req: Request, res: Response)
     typeof targetPoints !== 'number' ||
     !Number.isInteger(targetPoints) ||
     targetPoints < 1 ||
-    targetPoints > 999999
+    targetPoints > 999999 ||
+    !lifespan || !validLifespans.includes(lifespan) ||
+    (lifespan === 'one_time' && (!validDate(startDate) || !validDate(endDate) || endDate <= startDate))
   ) {
     res.status(400).json({ error: 'invalid request' });
     return;
@@ -484,14 +513,42 @@ router.post('/:familyId/point-system/goals', async (req: Request, res: Response)
     return;
   }
 
-  const result = await pool.query(
-    `INSERT INTO point_goals (member_id, name, target_points)
-     VALUES ($1, $2, $3)
-     RETURNING id AS "goalId", member_id AS "memberId", name, target_points AS "targetPoints"`,
-    [memberId, name.trim(), targetPoints]
+  const insertResult = await pool.query(
+    `INSERT INTO point_goals (member_id, name, target_points, lifespan, start_date, end_date)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [memberId, name.trim(), targetPoints, lifespan, startDate ?? null, endDate ?? null]
+  );
+  const goalId = (insertResult.rows[0] as { id: number }).id;
+
+  const selectResult = await pool.query(
+    `SELECT
+      pg.id             AS "goalId",
+      pg.member_id      AS "memberId",
+      pg.name,
+      pg.target_points  AS "targetPoints",
+      pg.lifespan,
+      pg.start_date     AS "startDate",
+      pg.end_date       AS "endDate",
+      COALESCE((
+        SELECT SUM(pe.delta)::INTEGER
+        FROM point_events pe
+        WHERE pe.member_id = pg.member_id
+          AND pe.event_date >= CASE pg.lifespan
+            WHEN 'daily'    THEN COALESCE($2::DATE, CURRENT_DATE)
+            WHEN 'weekly'   THEN DATE_TRUNC('week', COALESCE($2::DATE, CURRENT_DATE))::DATE
+            WHEN 'monthly'  THEN DATE_TRUNC('month', COALESCE($2::DATE, CURRENT_DATE))::DATE
+            WHEN 'one_time' THEN COALESCE(pg.start_date::DATE, DATE '1970-01-01')
+            ELSE COALESCE($2::DATE, CURRENT_DATE)
+          END
+          AND (pg.lifespan != 'one_time' OR pe.event_date <= COALESCE(pg.end_date::DATE, COALESCE($2::DATE, CURRENT_DATE)))
+      ), 0)::INTEGER AS "periodProgress"
+    FROM point_goals pg
+    WHERE pg.id = $1`,
+    [goalId, safeLocalDate]
   );
 
-  res.status(201).json(result.rows[0]);
+  res.status(201).json(selectResult.rows[0]);
 });
 
 // DELETE /families/:familyId/point-system/goals/:goalId
