@@ -1,6 +1,15 @@
 import Foundation
 import OSLog
 
+func localDateString() -> String { localDateString(from: Date()) }
+
+func localDateString(from date: Date) -> String {
+    let fmt = DateFormatter()
+    fmt.locale = Locale(identifier: "en_US_POSIX")
+    fmt.dateFormat = "yyyy-MM-dd"
+    return fmt.string(from: date)
+}
+
 private let pointSystemLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TheBetterWe", category: "PointSystemService")
 
 enum PointSystemError: LocalizedError {
@@ -102,22 +111,42 @@ enum PointSystemService {
     }
 
     static func fetchGoals(familyId: Int, memberId: Int) async throws -> [PSGoal] {
-        let data = try await get(path: "/families/\(familyId)/point-system/members/\(memberId)/goals")
+        let data = try await get(path: "/families/\(familyId)/point-system/members/\(memberId)/goals?localDate=\(localDateString())")
         guard let goals = try? JSONDecoder().decode([PSGoal].self, from: data) else {
             throw PointSystemError.network
         }
         return goals
     }
 
-    static func createGoal(familyId: Int, memberId: Int, name: String, targetPoints: Int) async throws -> PSGoal {
+    static func createGoal(
+        familyId: Int,
+        memberId: Int,
+        name: String,
+        targetPoints: Int,
+        lifespan: GoalLifespan,
+        startDate: String?,
+        endDate: String?
+    ) async throws -> PSGoal {
         struct Body: Encodable {
             let memberId: Int
             let name: String
             let targetPoints: Int
+            let lifespan: String
+            let startDate: String?
+            let endDate: String?
+            let localDate: String
         }
         let data = try await post(
             path: "/families/\(familyId)/point-system/goals",
-            body: Body(memberId: memberId, name: name, targetPoints: targetPoints),
+            body: Body(
+                memberId: memberId,
+                name: name,
+                targetPoints: targetPoints,
+                lifespan: lifespan.rawValue,
+                startDate: startDate,
+                endDate: endDate,
+                localDate: localDateString()
+            ),
             expectedStatus: 201
         )
         guard let goal = try? JSONDecoder().decode(PSGoal.self, from: data) else {

@@ -360,7 +360,7 @@ private struct GoalProgressSection: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(goals) { goal in
-                        GoalRow(goal: goal, currentBalance: child.balance) {
+                        GoalRow(goal: goal) {
                             Task { await deleteGoal(goal) }
                         }
                     }
@@ -368,6 +368,7 @@ private struct GoalProgressSection: View {
             }
         }
         .task { await loadGoals() }
+        .onChange(of: child.balance) { _, _ in Task { await loadGoals() } }
         .sheet(isPresented: $showCreateGoal, onDismiss: { goalSheetDetent = .height(510) }) {
             CreateGoalSheet(
                 familyId: familyId,
@@ -407,12 +408,34 @@ private struct GoalProgressSection: View {
 
 private struct GoalRow: View {
     let goal: PSGoal
-    let currentBalance: Int
     let onDelete: () -> Void
+
+    @State private var cardScale: CGFloat = 1.0
+
+    private var isFulfilled: Bool { goal.periodProgress >= goal.targetPoints && goal.targetPoints > 0 }
 
     private var progress: Double {
         guard goal.targetPoints > 0 else { return 0 }
-        return min(1.0, Double(currentBalance) / Double(goal.targetPoints))
+        return max(0.0, min(1.0, Double(goal.periodProgress) / Double(goal.targetPoints)))
+    }
+
+    private var periodLabel: String {
+        switch goal.goalLifespan {
+        case .daily:   return String(localized: "Today")
+        case .weekly:  return String(localized: "This week")
+        case .monthly: return String(localized: "This month")
+        case .oneTime:
+            guard let start = goal.startDate, let end = goal.endDate else { return "" }
+            let parser = DateFormatter()
+            parser.locale = Locale(identifier: "en_US_POSIX")
+            parser.dateFormat = "yyyy-MM-dd"
+            let display = DateFormatter()
+            display.locale = Locale.current
+            display.setLocalizedDateFormatFromTemplate("MMMd")
+            guard let sd = parser.date(from: start), let ed = parser.date(from: end) else { return "\(start) – \(end)" }
+            return "\(display.string(from: sd)) – \(display.string(from: ed))"
+        case nil: return ""
+        }
     }
 
     var body: some View {
@@ -421,15 +444,41 @@ private struct GoalRow: View {
                 Text(verbatim: goal.name)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text("\(currentBalance)/\(goal.targetPoints)")
+                Text("\(goal.periodProgress)/\(goal.targetPoints)")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(isFulfilled ? Color(red: 22/255, green: 163/255, blue: 74/255) : Color.accentColor)
+            }
+            if let lifespan = goal.goalLifespan, !periodLabel.isEmpty || isFulfilled {
+                HStack(spacing: 4) {
+                    if let lifespan = goal.goalLifespan, !periodLabel.isEmpty {
+                        Image(systemName: lifespan.icon)
+                            .font(.system(size: 10))
+                        Text(verbatim: periodLabel)
+                            .font(.system(size: 11))
+                    }
+                    Spacer()
+                    if isFulfilled {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 9, weight: .bold))
+                            Text("Goal reached!")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(Color(red: 34/255, green: 197/255, blue: 94/255))
+                        .clipShape(Capsule())
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color(.systemGray5))
                         .frame(height: PointSystemStyle.goalProgressHeight)
-                    Capsule().fill(Color.accentColor)
+                    Capsule()
+                        .fill(isFulfilled ? Color(red: 34/255, green: 197/255, blue: 94/255) : Color.accentColor)
                         .frame(width: geo.size.width * progress,
                                height: PointSystemStyle.goalProgressHeight)
                         .animation(.easeOut(duration: 0.6), value: progress)
@@ -438,37 +487,29 @@ private struct GoalRow: View {
             .frame(height: PointSystemStyle.goalProgressHeight)
         }
         .padding(16)
-        .background(Color(.systemBackground))
+        .background(isFulfilled ? Color(red: 240/255, green: 253/255, blue: 244/255) : Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color(.systemGray4), lineWidth: 1))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(isFulfilled ? Color(red: 187/255, green: 247/255, blue: 208/255) : Color(.systemGray4), lineWidth: isFulfilled ? 1.5 : 1)
+        )
+        .scaleEffect(cardScale)
+        .onAppear {
+            guard isFulfilled else { return }
+            cardScale = 1.0
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) {
+                cardScale = 1.04
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) {
+                    cardScale = 1.0
+                }
+            }
+        }
         .contextMenu {
             Button(role: .destructive, action: onDelete) {
                 Label("Delete", systemImage: "trash")
             }
-        }
-    }
-}
-
-// MARK: - GoalLifespan
-
-private enum GoalLifespan: CaseIterable, Hashable {
-    case daily, weekly, monthly, oneTime
-
-    var label: LocalizedStringKey {
-        switch self {
-        case .daily:   return "Daily"
-        case .weekly:  return "Weekly"
-        case .monthly: return "Monthly"
-        case .oneTime: return "One-time"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .daily:   return "sun.horizon"
-        case .weekly:  return "calendar"
-        case .monthly: return "calendar.badge.clock"
-        case .oneTime: return "calendar.badge.checkmark"
         }
     }
 }
@@ -495,7 +536,10 @@ private struct CreateGoalSheet: View {
 
     private var targetPoints: Int? { Int(targetText).flatMap { $0 > 0 ? $0 : nil } }
     private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && targetPoints != nil
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+        && targetPoints != nil
+        && selectedLifespan != nil
+        && (selectedLifespan != .oneTime || endDate > startDate)
     }
 
     private static let cr: CGFloat        = PointSystemStyle.formConfirmCornerRadius
@@ -737,16 +781,25 @@ private struct CreateGoalSheet: View {
     // MARK: Save
 
     private func save() {
-        guard let pts = targetPoints, !isCreating else { return }
+        guard let pts = targetPoints, let lifespan = selectedLifespan, !isCreating else { return }
         isCreating = true
         errorMessage = nil
+        var startStr: String? = nil
+        var endStr: String?   = nil
+        if lifespan == .oneTime {
+            startStr = localDateString(from: startDate)
+            endStr   = localDateString(from: endDate)
+        }
         Task {
             do {
                 let goal = try await PointSystemService.createGoal(
                     familyId: familyId,
                     memberId: memberId,
                     name: name.trimmingCharacters(in: .whitespaces),
-                    targetPoints: pts
+                    targetPoints: pts,
+                    lifespan: lifespan,
+                    startDate: startStr,
+                    endDate: endStr
                 )
                 isCreating = false
                 onSuccess(goal)
@@ -900,7 +953,7 @@ private struct ActivityRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                Text(verbatim: activity.eventDate)
+                Text(verbatim: activity.formattedDate)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

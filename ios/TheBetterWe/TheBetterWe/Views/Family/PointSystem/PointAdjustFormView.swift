@@ -246,7 +246,8 @@ struct PointAdjustFormView: View {
                     familyId: familyId,
                     memberId: memberId,
                     delta: delta,
-                    note: note
+                    note: note,
+                    date: localDateString()
                 )
                 isSubmitting = false
                 onSuccess(response.newBalance)
