@@ -72,7 +72,7 @@ struct ActionStyle {
     )
     static let deduct = ActionStyle(
         tint: PointSystemStyle.deductTint,
-        confirmLabel: "Deduct Points",
+        confirmLabel: "Redeem",
         sign: -1
     )
 }

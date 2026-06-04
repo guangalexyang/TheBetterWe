@@ -437,6 +437,7 @@ router.get('/:familyId/point-system/members/:memberId/goals', async (req: Reques
         SELECT SUM(pe.delta)::INTEGER
         FROM point_events pe
         WHERE pe.member_id = pg.member_id
+          AND pe.delta > 0
           AND pe.event_date >= CASE pg.lifespan
             WHEN 'daily'    THEN COALESCE($3::DATE, CURRENT_DATE)
             WHEN 'weekly'   THEN DATE_TRUNC('week', COALESCE($3::DATE, CURRENT_DATE))::DATE
@@ -534,6 +535,7 @@ router.post('/:familyId/point-system/goals', async (req: Request, res: Response)
         SELECT SUM(pe.delta)::INTEGER
         FROM point_events pe
         WHERE pe.member_id = pg.member_id
+          AND pe.delta > 0
           AND pe.event_date >= CASE pg.lifespan
             WHEN 'daily'    THEN COALESCE($2::DATE, CURRENT_DATE)
             WHEN 'weekly'   THEN DATE_TRUNC('week', COALESCE($2::DATE, CURRENT_DATE))::DATE

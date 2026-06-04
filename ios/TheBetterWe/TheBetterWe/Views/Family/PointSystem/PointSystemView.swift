@@ -247,7 +247,7 @@ private struct ChildCardView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "minus")
                             .font(.system(size: 14, weight: .semibold))
-                        Text("Deduct")
+                        Text("Redeem")
                             .font(.system(size: 15, weight: .semibold))
                     }
                     .frame(maxWidth: .infinity)
@@ -949,7 +949,7 @@ private struct ActivityRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: activity.note ?? (activity.isPositive
                     ? String(localized: "Points added")
-                    : String(localized: "Points deducted")))
+                    : String(localized: "Points redeemed")))
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -1130,7 +1130,7 @@ private struct ChildFullView: View {
             actionRow(
                 icon: "minus",
                 iconBackground: PointSystemStyle.deductIconBackground,
-                label: "Deduct points",
+                label: "Redeem",
                 row: .deduct
             )
             Divider()

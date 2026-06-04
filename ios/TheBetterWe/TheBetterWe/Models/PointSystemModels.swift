@@ -37,21 +37,12 @@ struct PSActivity: Identifiable, Decodable {
     var isPositive: Bool { delta > 0 }
 
     var formattedDate: String {
-        // Parse the date string as UTC midnight so that Calendar.current (local tz) sees the right day
-        let utcParser = DateFormatter()
-        utcParser.locale = Locale(identifier: "en_US_POSIX")
-        utcParser.dateFormat = "yyyy-MM-dd"
-        utcParser.timeZone = TimeZone(abbreviation: "UTC")
-        guard let date = utcParser.date(from: String(eventDate.prefix(10))) else { return String(eventDate.prefix(10)) }
-
+        let date = Date(timeIntervalSince1970: TimeInterval(createdAt))
         let cal = Calendar.current
         if cal.isDateInToday(date)     { return String(localized: "Today") }
         if cal.isDateInYesterday(date) { return String(localized: "Yesterday") }
-
-        // setLocalizedDateFormatFromTemplate handles locale-specific suffixes (e.g. 日 in Chinese)
         let display = DateFormatter()
         display.locale = Locale.current
-        display.timeZone = TimeZone(abbreviation: "UTC")
         let sameYear = cal.component(.year, from: date) == cal.component(.year, from: Date())
         display.setLocalizedDateFormatFromTemplate(sameYear ? "MMMd" : "MMMdyyyy")
         return display.string(from: date)
