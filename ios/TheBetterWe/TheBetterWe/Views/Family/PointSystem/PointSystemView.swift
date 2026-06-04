@@ -323,8 +323,11 @@ private struct GoalProgressSection: View {
     let familyId: Int
     let onLogOut: () -> Void
 
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var goals: [PSGoal] = []
     @State private var isLoading = false
+    @State private var lastLoadedDate: String = ""
     @State private var showCreateGoal = false
     @State private var goalSheetDetent: PresentationDetent = .height(510)
 
@@ -368,6 +371,14 @@ private struct GoalProgressSection: View {
             }
         }
         .task { await loadGoals() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            Task { await loadGoals() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && localDateString() != lastLoadedDate {
+                Task { await loadGoals() }
+            }
+        }
         .onChange(of: child.balance) { _, _ in Task { await loadGoals() } }
         .sheet(isPresented: $showCreateGoal, onDismiss: { goalSheetDetent = .height(510) }) {
             CreateGoalSheet(
@@ -391,6 +402,7 @@ private struct GoalProgressSection: View {
         if let fetched = try? await PointSystemService.fetchGoals(familyId: familyId, memberId: child.memberId) {
             goals = fetched
         }
+        lastLoadedDate = localDateString()
         isLoading = false
     }
 
