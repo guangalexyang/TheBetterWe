@@ -133,6 +133,7 @@ TheBetterWe/
 ### iOS — Models
 - All PostgreSQL timestamp columns are `INTEGER` (Unix epoch via `EXTRACT(EPOCH FROM NOW())::INTEGER`). Decode as `Int`, never `String`.
 - `PSActivity.createdAt: Int`, not `String`.
+- **Activity date display — use `createdAt`, not `eventDate`:** For showing when an activity happened, use `Date(timeIntervalSince1970: TimeInterval(createdAt))`. Never parse the `eventDate` YYYY-MM-DD string as UTC midnight for display — for UTC-N users, midnight UTC on date D is still D-1 locally, causing today's events to show as "Yesterday".
 - **Date-only display:** Use `setLocalizedDateFormatFromTemplate("MMMd")` (or `"MMMdyyyy"` for cross-year dates) for all user-facing date strings — it automatically adds locale-specific suffixes like "日" in Chinese. Never hardcode `dateFormat = "MMM d"`.
 - **Timezone-correct period queries:** iOS must send the device's local date as `?localDate=YYYY-MM-DD` on any request whose result depends on "today / this week / this month". Use `localDateString()` (defined in `PointSystemService.swift`) for this. Also pass `date: localDateString()` in POST bodies for event records so `event_date` stores device local date.
 
