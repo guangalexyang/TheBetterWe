@@ -6,9 +6,12 @@ struct PointAdjustFormView: View {
     let style: ActionStyle
     let familyId: Int
     let memberId: Int
+    var balance: Int? = nil
     let onSuccess: (Int) -> Void
     let onLogOut: () -> Void
     var onDismiss: (() -> Void)? = nil   // nil = not in sheet mode
+
+    private var maxPoints: Int { style.sign < 0 ? max(0, balance ?? 9999) : 9999 }
 
     @State private var points: Int = 2
     @State private var pointsText: String = "2"
@@ -77,6 +80,7 @@ struct PointAdjustFormView: View {
                 numberField
 
                 stepperButton(symbol: "plus") {
+                    guard points < maxPoints else { return }
                     points += 1
                     pointsText = "\(points)"
                 }
@@ -111,7 +115,8 @@ struct PointAdjustFormView: View {
                 let filtered = newValue.filter(\.isNumber)
                 if filtered != newValue { pointsText = filtered }
                 if let v = Int(filtered), v >= 1, v <= 9999 {
-                    points = v
+                    points = min(v, maxPoints)
+                    pointsText = "\(points)"
                 }
             }
             .onChange(of: isEditing) { _, editing in
@@ -220,7 +225,7 @@ struct PointAdjustFormView: View {
                 .clipShape(RoundedRectangle(cornerRadius: PointSystemStyle.formConfirmCornerRadius))
             }
             .buttonStyle(.plain)
-            .disabled(isSubmitting || points < 1)
+            .disabled(isSubmitting || points < 1 || maxPoints < 1)
 
             if let msg = errorMessage {
                 Text(verbatim: msg)

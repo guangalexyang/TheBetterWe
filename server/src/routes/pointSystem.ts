@@ -164,6 +164,18 @@ router.post('/:familyId/point-system/events', async (req: Request, res: Response
   const safeDate: string | null =
     typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 
+  if (delta < 0) {
+    const balanceResult = await pool.query(
+      'SELECT COALESCE(SUM(delta), 0)::INTEGER AS balance FROM point_events WHERE member_id = $1',
+      [memberId]
+    );
+    const currentBalance = balanceResult.rows[0].balance as number;
+    if (currentBalance + delta < 0) {
+      res.status(422).json({ error: 'insufficient_balance' });
+      return;
+    }
+  }
+
   const eventResult = await pool.query(
     'INSERT INTO point_events (member_id, delta, note, event_date) VALUES ($1, $2, $3, COALESCE($4::DATE, CURRENT_DATE)) RETURNING id',
     [memberId, delta, safeNote, safeDate]

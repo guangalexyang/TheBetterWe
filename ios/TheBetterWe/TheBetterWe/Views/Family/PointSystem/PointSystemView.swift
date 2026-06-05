@@ -253,10 +253,11 @@ private struct ChildCardView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: PointSystemStyle.actionButtonHeight)
                     .background(Color(.systemGray6))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(child.balance <= 0 ? Color(.systemGray3) : .primary)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+                .disabled(child.balance <= 0)
 
                 Button {
                     activeSheet = .reward
@@ -289,6 +290,7 @@ private struct ChildCardView: View {
                 style: sheet == .reward ? .add : .deduct,
                 familyId: familyId,
                 memberId: child.memberId,
+                balance: sheet == .deduct ? child.balance : nil,
                 onSuccess: { newBalance in
                     onBalanceChange(newBalance)
                     activeSheet = nil
@@ -323,8 +325,11 @@ private struct GoalProgressSection: View {
     let familyId: Int
     let onLogOut: () -> Void
 
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var goals: [PSGoal] = []
     @State private var isLoading = false
+    @State private var lastLoadedDate: String = ""
     @State private var showCreateGoal = false
     @State private var goalSheetDetent: PresentationDetent = .height(510)
 
@@ -368,6 +373,14 @@ private struct GoalProgressSection: View {
             }
         }
         .task { await loadGoals() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            Task { await loadGoals() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active && localDateString() != lastLoadedDate {
+                Task { await loadGoals() }
+            }
+        }
         .onChange(of: child.balance) { _, _ in Task { await loadGoals() } }
         .sheet(isPresented: $showCreateGoal, onDismiss: { goalSheetDetent = .height(510) }) {
             CreateGoalSheet(
@@ -391,6 +404,7 @@ private struct GoalProgressSection: View {
         if let fetched = try? await PointSystemService.fetchGoals(familyId: familyId, memberId: child.memberId) {
             goals = fetched
         }
+        lastLoadedDate = localDateString()
         isLoading = false
     }
 
@@ -1147,6 +1161,7 @@ private struct ChildFullView: View {
         row: ExpandedRow
     ) -> some View {
         let isOpen = expandedRow == row
+        let isDisabled = row == .deduct && child.balance <= 0
         VStack(spacing: 0) {
             Button {
                 withAnimation(.easeInOut(duration: 0.22)) {
@@ -1165,7 +1180,7 @@ private struct ChildFullView: View {
                     }
                     Text(label)
                         .font(.body)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(isDisabled ? Color(.systemGray3) : .primary)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption.bold())
@@ -1178,12 +1193,14 @@ private struct ChildFullView: View {
                 .padding(.vertical, PointSystemStyle.rowVPadding)
             }
             .buttonStyle(.plain)
+            .disabled(isDisabled)
 
             if isOpen {
                 PointAdjustFormView(
                     style: row == .add ? .add : .deduct,
                     familyId: familyId,
                     memberId: child.memberId,
+                    balance: row == .deduct ? child.balance : nil,
                     onSuccess: { newBalance in
                         onBalanceChange(newBalance)
                         withAnimation(.easeInOut(duration: 0.22)) {

@@ -123,6 +123,9 @@ TheBetterWe/
 - **Error handling in service calls:** Never use `try?` on async API calls in views. Use `do-catch` and store the error in a `@State var loadError: String?` to surface it in the UI. Silent failures show empty state with no diagnostic.
 - **ActivitySection reload:** Use `.id("key-\(child.balance)")` to force a view identity change (and `.task` re-fire) after a balance update.
 
+### iOS — Time & Calendar
+- **Calendar day change detection:** Use `.onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged))` to reload data at local midnight while the app is in foreground. Pair with a `scenePhase → .active` + date-string comparison (`localDateString() != lastLoadedDate`) to handle the case where midnight passed while the app was backgrounded. Never use `Task.sleep(nanoseconds:)` for this — it uses `SuspendingClock` and pauses during device sleep, so it won't fire at midnight if the device was asleep.
+
 ### iOS — Sheets & Presentation
 - **Sheet height:** Use `.presentationDetents([.height(X)])` with a calculated pixel value. `.medium` (~50% screen) is almost always too short; `.large` wastes space. Estimate: header ~70pt + fields ~70pt each + footer ~96pt + spacing.
 - **Dynamic sheet height:** Two detents + `@Binding var detent: PresentationDetent` passed into the sheet. Reset to small detent `onDismiss`. Example: `.height(510)` ↔ `.height(730)` driven by `onChange(of:)` inside the sheet.
