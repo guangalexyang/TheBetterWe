@@ -72,8 +72,7 @@ final class ASRService: NSObject, ObservableObject {
         do {
             // .default mode preserves AGC + noise reduction that SFSpeechRecognizer depends on.
             // .measurement disables those, causing the recognizer to return no partial results.
-            try session.setCategory(.playAndRecord, mode: .default,
-                                    options: [.duckOthers, .allowBluetooth])
+            try session.setCategory(.playAndRecord, mode: .default, options: .duckOthers)
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             onError?(error)
