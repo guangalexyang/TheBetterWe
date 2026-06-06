@@ -28,7 +28,9 @@ final class ASRService: NSObject, ObservableObject {
 
     // MARK: - Private
 
-    private let audioEngine = AVAudioEngine()
+    // Fresh instance each session — reusing a stopped AVAudioEngine leaves inputNode
+    // format at 0/0 which causes installTap to crash with IsFormatSampleRateAndChannelCountValid.
+    private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-Hans"))
@@ -55,9 +57,9 @@ final class ASRService: NSObject, ObservableObject {
     // MARK: - Lifecycle
 
     func startListening(noSpeechTimeout: TimeInterval = 3, silenceTimeout: TimeInterval = 1.5) {
-        reset()
+        reset()   // tears down previous engine and deactivates session
 
-        // Activate audio session first — inputNode.outputFormat returns 0 sample rate otherwise.
+        // Activate session before creating engine so inputNode.outputFormat is valid.
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.record, mode: .measurement, options: .duckOthers)
@@ -67,11 +69,14 @@ final class ASRService: NSObject, ObservableObject {
             return
         }
 
+        let engine = AVAudioEngine()
+        audioEngine = engine
+
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         recognitionRequest = request
 
-        let inputNode = audioEngine.inputNode
+        let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
@@ -85,7 +90,7 @@ final class ASRService: NSObject, ObservableObject {
         }
 
         do {
-            try audioEngine.start()
+            try engine.start()
         } catch {
             onError?(error)
             return
@@ -113,8 +118,9 @@ final class ASRService: NSObject, ObservableObject {
     }
 
     func stopRecording() {
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         noSpeechTimer?.invalidate()
