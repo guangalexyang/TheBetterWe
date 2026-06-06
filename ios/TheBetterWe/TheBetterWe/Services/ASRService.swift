@@ -108,9 +108,7 @@ final class ASRService: NSObject, ObservableObject {
         }
 
         recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
-            if let error {
-                print("[ASR] recognition error: \(error)")
-            }
+            if let error { print("[ASR] recognition error: \(error)") }
             guard let self, let result else { return }
             let text = result.bestTranscription.formattedString
             Task { @MainActor in

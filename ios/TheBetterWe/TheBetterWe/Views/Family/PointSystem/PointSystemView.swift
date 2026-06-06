@@ -5,6 +5,7 @@ import SwiftUI
 struct PointSystemView: View {
     let membership: FamilyMembership
     var onLogOut: () -> Void = {}
+    var initialChildId: Int? = nil
 
     @State private var children: [PSChild] = []
     @State private var selectedIndex: Int = 0
@@ -148,6 +149,10 @@ struct PointSystemView: View {
         errorMessage = nil
         do {
             children = try await PointSystemService.fetchChildren(familyId: membership.familyId)
+            if let childId = initialChildId,
+               let idx = children.firstIndex(where: { $0.memberId == childId }) {
+                selectedIndex = idx
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -167,12 +172,19 @@ private struct MemberAvatarCell: View {
             VStack(spacing: 6) {
                 ZStack {
                     Circle()
-                        .strokeBorder(
-                            isSelected ? Color.accentColor : Color(.systemGray4),
-                            lineWidth: isSelected ? PointSystemStyle.memberAvatarBorderWidth + 1 : PointSystemStyle.memberAvatarBorderWidth
+                        .strokeBorder(Color.accentColor, lineWidth: 2.5)
+                        .frame(width: PointSystemStyle.memberAvatarSize + 6,
+                               height: PointSystemStyle.memberAvatarSize + 6)
+                        .opacity(isSelected ? 1 : 0)
+                    Circle().fill(
+                        LinearGradient(
+                            colors: child.gender.gradientColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                        .frame(width: PointSystemStyle.memberAvatarSize,
-                               height: PointSystemStyle.memberAvatarSize)
+                    )
+                    .frame(width: PointSystemStyle.memberAvatarSize,
+                           height: PointSystemStyle.memberAvatarSize)
                     Text(child.gender.avatarEmoji)
                         .font(.system(size: 28))
                 }
@@ -208,10 +220,15 @@ private struct ChildCardView: View {
             HStack(alignment: .center, spacing: 16) {
                 HStack(spacing: 12) {
                     ZStack {
-                        Circle()
-                            .strokeBorder(Color.accentColor, lineWidth: PointSystemStyle.memberAvatarBorderWidth)
-                            .frame(width: PointSystemStyle.childCardAvatarSize,
-                                   height: PointSystemStyle.childCardAvatarSize)
+                        Circle().fill(
+                            LinearGradient(
+                                colors: child.gender.gradientColors,
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: PointSystemStyle.childCardAvatarSize,
+                               height: PointSystemStyle.childCardAvatarSize)
                         Text(child.gender.avatarEmoji)
                             .font(.system(size: 24))
                     }

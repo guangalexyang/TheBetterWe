@@ -11,6 +11,7 @@ struct FamilyView: View {
     var onLogOut: () -> Void = {}
 
     @State private var selectedTab: FamilyTab = .dashboard
+    @State private var pointSystemInitialChildId: Int? = nil
     @State private var showDrawer = false
     @State private var showInviteSheet = false
     @State private var showEditSheet = false
@@ -59,6 +60,9 @@ struct FamilyView: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: showDrawer)
+        .onChange(of: selectedTab) { _, newTab in
+            if newTab == .dashboard { pointSystemInitialChildId = nil }
+        }
         .confirmationDialog("Delete \"\(membership.familyName)\"?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Delete Family", role: .destructive) {
                 isDeleting = true
@@ -96,11 +100,14 @@ struct FamilyView: View {
     private var tabContent: some View {
         switch selectedTab {
         case .dashboard:
-            DashboardView(membership: membership)
+            DashboardView(membership: membership, onChildTapped: { child in
+                pointSystemInitialChildId = child.memberId
+                selectedTab = .module(.pointSystem)
+            })
         case .module(let m):
             switch m {
             case .pointSystem:
-                PointSystemView(membership: membership, onLogOut: onLogOut)
+                PointSystemView(membership: membership, onLogOut: onLogOut, initialChildId: pointSystemInitialChildId)
             default:
                 Text("TODO: \(m.rawValue)")
                     .foregroundStyle(.secondary)

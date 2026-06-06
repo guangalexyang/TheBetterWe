@@ -187,11 +187,8 @@ struct VoiceInputView: View {
         }
 
         asr.onSilenceDetected = {
-            let transcript = self.asr.confirmedTranscript.isEmpty
-                ? self.asr.interimTranscript
-                : self.asr.confirmedTranscript
-            let matched = Self.hasKnownIntent(transcript)
-            withAnimation { self.voiceState = matched ? .stoppedMatch : .stoppedNoMatch }
+            // Phase 1: NLP not implemented — always show error card
+            withAnimation { self.voiceState = .stoppedNoMatch }
         }
 
         asr.onNoSpeechTimeout = {
@@ -205,23 +202,6 @@ struct VoiceInputView: View {
         guard voiceState == .stoppedMatch || voiceState == .stoppedNoMatch else { return }
         asr.reset()
         startSession()
-    }
-
-    /// Keyword-based intent detection for Phase 1 (no server NLP yet).
-    /// Returns true when the transcript contains a recognised command pattern.
-    /// Extend this list as new intents are added; replace with server NLP in Phase 4.
-    private static func hasKnownIntent(_ text: String) -> Bool {
-        guard !text.isEmpty else { return false }
-        // 加分 / 扣分 / 兑换 keywords, with common homophones / spacing variants
-        let addPatterns    = ["加分", "加了", "增加", "加十", "加一", "加二", "加三", "加四", "加五",
-                              "加六", "加七", "加八", "加九"]
-        let deductPatterns = ["扣分", "扣了", "减少", "扣十", "扣一", "扣二", "扣三", "扣四", "扣五",
-                              "扣六", "扣七", "扣八", "扣九"]
-        let redeemPatterns = ["兑换", "换了", "兑了"]
-        // Also catch "加N分" / "扣N分" patterns where N is a digit
-        let digitPointPattern = (text.contains("加") || text.contains("扣")) && text.contains("分")
-        let all = addPatterns + deductPatterns + redeemPatterns
-        return all.contains(where: { text.contains($0) }) || digitPointPattern
     }
 
     private func startCountdownAnimation(duration: TimeInterval) {
