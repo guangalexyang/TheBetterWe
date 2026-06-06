@@ -118,6 +118,14 @@ TheBetterWe/
 
 ## Technical Patterns & Gotchas
 
+### iOS — Audio (AVAudioEngine + SFSpeechRecognizer)
+- **Fresh engine per session:** Never reuse a stopped `AVAudioEngine`. After `stop()`, `inputNode.outputFormat(forBus:)` returns 0 sample rate/channels, crashing `installTap`. Create `let engine = AVAudioEngine()` fresh each call to `startListening`.
+- **Session before engine:** Activate `AVAudioSession` before creating the engine — `inputNode.outputFormat` is 0/0 if the session isn't active when queried.
+- **Session category:** Use `.playAndRecord` + `.default` mode + `.duckOthers`. `.record` causes I/O reconfig cycles on Simulator. `.measurement` mode disables AGC/noise reduction, causing `SFSpeechRecognizer` to never fire partial results.
+- **Silence detection:** Track `isCurrentlySilent: Bool`. Only arm the silence timer on the **sound → silence transition** — not on every audio buffer below threshold. Buffers arrive every ~23ms; resetting the timer per buffer means it never fires.
+- **Privacy keys:** This project uses `GENERATE_INFOPLIST_FILE = YES` — there is no standalone `Info.plist`. Add privacy keys as `INFOPLIST_KEY_NSMicrophoneUsageDescription` and `INFOPLIST_KEY_NSSpeechRecognitionUsageDescription` directly in `project.pbxproj` under **both** Debug and Release `buildSettings`.
+- **Simulator zh-Hans bug:** iOS 26 beta Simulator ships a corrupted Chinese on-device model. Use `#if targetEnvironment(simulator)` to select `en-US` locale on Simulator, `zh-Hans` on device.
+
 ### iOS — Networking
 - **URL construction with query params:** Never use `URL.appending(path:)` when the path contains `?` — it percent-encodes `?` as `%3F`, breaking Express routing. Always use `URL(string: baseURL.absoluteString + path)`.
 - **Error handling in service calls:** Never use `try?` on async API calls in views. Use `do-catch` and store the error in a `@State var loadError: String?` to surface it in the UI. Silent failures show empty state with no diagnostic.
@@ -160,6 +168,7 @@ Build UI **view by view** — never scaffold multiple views at once without user
    - ✅ Siri App Intents — AddPointsIntent + DeductPointsIntent (Chinese + English phrases)
    - ✅ App display name: **诺米** (`INFOPLIST_KEY_CFBundleDisplayName` in pbxproj)
    - ✅ Point System goals — create, lifespan (daily/weekly/monthly/one-time), period progress, fulfilled UI
+   - ✅ Voice Input ASR sheet — `+` tab bar button opens 5-state bottom sheet; `AVAudioEngine` + `SFSpeechRecognizer` (zh-Hans on device, en-US on Simulator); keyword-based intent detection for Phase 1
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
 3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
 4. **Phase 4** — Doubao API (in-app natural language point recording)
