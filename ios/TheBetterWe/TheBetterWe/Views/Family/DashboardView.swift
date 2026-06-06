@@ -4,6 +4,7 @@ import SwiftUI
 
 struct DashboardView: View {
     let membership: FamilyMembership
+    var onChildTapped: ((PSChild) -> Void)? = nil
 
     @State private var widgetOrder: [AppModule] = []
     @State private var draggingModule: AppModule? = nil
@@ -26,7 +27,8 @@ struct DashboardView: View {
                         WidgetCard(
                             module: module,
                             children: children,
-                            onAddChild: module == .pointSystem ? { showAddChild = true } : nil
+                            onAddChild: module == .pointSystem ? { showAddChild = true } : nil,
+                            onChildTapped: module == .pointSystem ? onChildTapped : nil
                         )
                         .opacity(draggingModule == module ? 0.0 : 1.0)
                         .gesture(longPressThenDrag(for: module))
@@ -59,7 +61,8 @@ struct DashboardView: View {
                 WidgetCard(
                     module: module,
                     children: children,
-                    onAddChild: nil
+                    onAddChild: nil,
+                    onChildTapped: nil
                 )
                 .frame(width: cardWidth)
                 .scaleEffect(1.05)
@@ -177,6 +180,7 @@ private struct WidgetCard: View {
     let module: AppModule
     var children: [PSChild] = []
     var onAddChild: (() -> Void)? = nil
+    var onChildTapped: ((PSChild) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -205,7 +209,7 @@ private struct WidgetCard: View {
             if children.isEmpty {
                 PointSystemEmptyState(onAddChild: onAddChild ?? {})
             } else {
-                PointSystemChildrenList(children: children, onAddChild: onAddChild ?? {})
+                PointSystemChildrenList(children: children, onAddChild: onAddChild ?? {}, onChildTapped: onChildTapped)
             }
         } else {
             Text("Coming soon")
@@ -252,35 +256,47 @@ private struct PointSystemEmptyState: View {
 private struct PointSystemChildrenList: View {
     let children: [PSChild]
     let onAddChild: () -> Void
+    var onChildTapped: ((PSChild) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(children) { child in
-                HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(
-                            LinearGradient(
-                                colors: child.gender.gradientColors,
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                Button {
+                    onChildTapped?(child)
+                } label: {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            Circle().fill(
+                                LinearGradient(
+                                    colors: child.gender.gradientColors,
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                        )
-                        Text(child.gender.avatarEmoji)
-                            .font(.system(size: 16))
+                            Text(child.gender.avatarEmoji)
+                                .font(.system(size: 16))
+                        }
+                        .frame(width: 36, height: 36)
+
+                        Text(verbatim: child.name)
+                            .font(.system(size: 15))
+                            .foregroundStyle(.primary)
+
+                        Spacer()
+
+                        Text("\(child.balance, format: .number) pts")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(child.gender.tintColor)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color(.systemGray3))
                     }
-                    .frame(width: 36, height: 36)
-
-                    Text(verbatim: child.name)
-                        .font(.system(size: 15))
-
-                    Spacer()
-
-                    Text("\(child.balance, format: .number) pts")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(child.gender.tintColor)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .buttonStyle(.plain)
 
                 Divider().padding(.leading, 64)
             }

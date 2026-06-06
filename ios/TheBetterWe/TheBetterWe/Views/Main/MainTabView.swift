@@ -52,8 +52,9 @@ struct MainTabView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: showMenu)
         .sheet(isPresented: $showCreate) {
-            Text("Create")
-                .presentationDetents([.medium])
+            VoiceInputView()
+                .presentationDetents([.fraction(VoiceInputStyle.sheetHeightFraction)])
+                .presentationDragIndicator(.hidden)
         }
         .toolbar(.hidden, for: .navigationBar)
         } // NavigationStack
