@@ -19,6 +19,8 @@ struct VoiceInputView: View {
     @State private var permissionDenied = false
     @State private var countdownProgress: CGFloat = 1.0
     @State private var countdownTimer: Timer?
+    @State private var micRotation: Double = 0
+    @State private var nudgeTimer: Timer?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,7 +32,8 @@ struct VoiceInputView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
             Spacer()
-            WaveBarsView(audioLevel: asr.audioLevel, isActive: voiceState == .talking)
+            WaveBarsView(audioLevel: asr.audioLevel, isActive: voiceState == .talking,
+                         isStopped: voiceState == .stoppedMatch || voiceState == .stoppedNoMatch)
                 .padding(.bottom, 12)
             micRow
                 .padding(.bottom, 36)
@@ -38,7 +41,11 @@ struct VoiceInputView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
         .onAppear { beginListening() }
-        .onDisappear { asr.stopRecording() }
+        .onDisappear { asr.stopRecording(); stopNudge() }
+        .onChange(of: voiceState) { _, newState in
+            let isStopped = newState == .stoppedMatch || newState == .stoppedNoMatch
+            isStopped ? startNudge() : stopNudge()
+        }
         .alert("麦克风权限被拒绝", isPresented: $permissionDenied) {
             Button("Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -159,6 +166,7 @@ struct VoiceInputView: View {
                             .foregroundStyle(.white)
                     }
             }
+            .rotationEffect(.degrees(micRotation))
             .buttonStyle(.plain)
         }
     }
@@ -187,6 +195,7 @@ struct VoiceInputView: View {
         }
 
         asr.onSilenceDetected = {
+            self.asr.stopRecording()
             // Phase 1: NLP not implemented — always show error card
             withAnimation { self.voiceState = .stoppedNoMatch }
         }
@@ -223,6 +232,27 @@ struct VoiceInputView: View {
         countdownTimer?.invalidate()
         countdownTimer = nil
     }
+
+    private func startNudge() {
+        nudgeTimer?.invalidate()
+        triggerNudge()
+        nudgeTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+            self.triggerNudge()
+        }
+    }
+
+    private func stopNudge() {
+        nudgeTimer?.invalidate()
+        nudgeTimer = nil
+        withAnimation(.easeOut(duration: 0.15)) { micRotation = 0 }
+    }
+
+    private func triggerNudge() {
+        withAnimation(.easeOut(duration: 0.06)) { micRotation = 15 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.25)) { self.micRotation = 0 }
+        }
+    }
 }
 
 // MARK: - WaveBarsView
@@ -231,24 +261,38 @@ struct VoiceInputView: View {
 private struct WaveBarsView: View {
     let audioLevel: Float
     let isActive: Bool
+    let isStopped: Bool
 
     // Phase offsets for staggered idle breathe (fractions of 2π)
     private let phaseOffsets: [Double] = [0, 0.4, 0.8, 0.4, 0]
 
     var body: some View {
-        TimelineView(.animation) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
+        if isStopped {
+            // Flat static bars — no animation, no TimelineView
             HStack(spacing: VoiceInputStyle.waveBarSpacing) {
-                ForEach(0..<VoiceInputStyle.waveBarsCount, id: \.self) { i in
+                ForEach(0..<VoiceInputStyle.waveBarsCount, id: \.self) { _ in
                     Capsule()
-                        .fill(barColor)
+                        .fill(Color(.systemGray4))
                         .frame(width: VoiceInputStyle.waveBarWidth,
-                               height: barHeight(index: i, time: t))
+                               height: VoiceInputStyle.waveBarMinHeight)
                 }
             }
+            .frame(height: VoiceInputStyle.waveBarMaxHeight)
+        } else {
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                HStack(spacing: VoiceInputStyle.waveBarSpacing) {
+                    ForEach(0..<VoiceInputStyle.waveBarsCount, id: \.self) { i in
+                        Capsule()
+                            .fill(barColor)
+                            .frame(width: VoiceInputStyle.waveBarWidth,
+                                   height: barHeight(index: i, time: t))
+                    }
+                }
+            }
+            .frame(height: VoiceInputStyle.waveBarMaxHeight)
+            .animation(.easeInOut(duration: 0.12), value: audioLevel)
         }
-        .frame(height: VoiceInputStyle.waveBarMaxHeight)
-        .animation(.easeInOut(duration: 0.12), value: audioLevel)
     }
 
     private var barColor: Color {
@@ -259,7 +303,6 @@ private struct WaveBarsView: View {
         let base  = VoiceInputStyle.waveBarMinHeight
         let range = VoiceInputStyle.waveBarMaxHeight - base
         if isActive {
-            // Level-driven with per-bar stagger
             let stagger: [Float] = [0.55, 0.75, 1.0, 0.75, 0.55]
             return max(base, base + range * CGFloat(audioLevel * stagger[index]))
         }
@@ -305,6 +348,7 @@ private struct IntentCardView: View {
             }
             Spacer()
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(12)
         .background(VoiceInputStyle.intentCardBackground, in: RoundedRectangle(cornerRadius: 10))
     }
@@ -346,6 +390,7 @@ private struct ErrorCardView: View {
             }
             Spacer()
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(12)
         .background(VoiceInputStyle.errorCardBackground, in: RoundedRectangle(cornerRadius: 10))
     }

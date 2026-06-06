@@ -45,7 +45,7 @@ final class ASRService: NSObject, ObservableObject {
     private var isCurrentlySilent = true   // tracks sound→silence transitions to avoid resetting timer every buffer
     private var noSpeechTimer: Timer?
     private var silenceTimer: Timer?
-    private let rmsThreshold: Float = 0.003   // low enough for Simulator mic; tune up on device if too sensitive
+    private let rmsThreshold: Float = 0.015   // tuned for real device ambient noise; Simulator mic is near-silent so any value works there
 
     // MARK: - Permissions
 
