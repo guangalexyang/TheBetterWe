@@ -36,6 +36,7 @@ final class ASRService: NSObject, ObservableObject {
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-Hans"))
 
     private var hasSpeechStarted = false
+    private var isCurrentlySilent = true   // tracks sound→silence transitions to avoid resetting timer every buffer
     private var noSpeechTimer: Timer?
     private var silenceTimer: Timer?
     private let rmsThreshold: Float = 0.003   // low enough for Simulator mic; tune up on device if too sensitive
@@ -137,6 +138,7 @@ final class ASRService: NSObject, ObservableObject {
         confirmedTranscript = ""
         audioLevel = 0
         hasSpeechStarted = false
+        isCurrentlySilent = true
         recognitionRequest = nil
         recognitionTask = nil
     }
@@ -144,20 +146,26 @@ final class ASRService: NSObject, ObservableObject {
     // MARK: - Private
 
     private func handleAudioLevel(rms: Float, silenceTimeout: TimeInterval) {
-        guard rms > rmsThreshold else {
-            if hasSpeechStarted {
+        if rms > rmsThreshold {
+            // Sound detected
+            if isCurrentlySilent {
+                isCurrentlySilent = false
+                silenceTimer?.invalidate()   // cancel any running silence timer
+            }
+            if !hasSpeechStarted {
+                hasSpeechStarted = true
+                noSpeechTimer?.invalidate()
+                onFirstSpeechDetected?()
+            }
+        } else {
+            // Below threshold — only arm the silence timer on the sound→silence transition
+            if hasSpeechStarted && !isCurrentlySilent {
+                isCurrentlySilent = true
                 silenceTimer?.invalidate()
                 silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceTimeout, repeats: false) { [weak self] _ in
                     Task { @MainActor in self?.onSilenceDetected?() }
                 }
             }
-            return
-        }
-        silenceTimer?.invalidate()
-        if !hasSpeechStarted {
-            hasSpeechStarted = true
-            noSpeechTimer?.invalidate()
-            onFirstSpeechDetected?()
         }
     }
 
