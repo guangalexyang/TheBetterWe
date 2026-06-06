@@ -64,8 +64,10 @@ final class ASRService: NSObject, ObservableObject {
         // .playAndRecord is more stable than .record on Simulator (avoids I/O reconfig cycles).
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .measurement,
-                                    options: [.duckOthers, .allowBluetooth, .defaultToSpeaker])
+            // .default mode preserves AGC + noise reduction that SFSpeechRecognizer depends on.
+            // .measurement disables those, causing the recognizer to return no partial results.
+            try session.setCategory(.playAndRecord, mode: .default,
+                                    options: [.duckOthers, .allowBluetooth])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             onError?(error)
@@ -100,7 +102,10 @@ final class ASRService: NSObject, ObservableObject {
             return
         }
 
-        recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, _ in
+        recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+            if let error {
+                print("[ASR] recognition error: \(error)")
+            }
             guard let self, let result else { return }
             let text = result.bestTranscription.formattedString
             Task { @MainActor in
