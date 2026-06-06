@@ -57,6 +57,16 @@ final class ASRService: NSObject, ObservableObject {
     func startListening(noSpeechTimeout: TimeInterval = 3, silenceTimeout: TimeInterval = 1.5) {
         reset()
 
+        // Activate audio session first — inputNode.outputFormat returns 0 sample rate otherwise.
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            onError?(error)
+            return
+        }
+
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         recognitionRequest = request
@@ -109,6 +119,7 @@ final class ASRService: NSObject, ObservableObject {
         recognitionTask?.cancel()
         noSpeechTimer?.invalidate()
         silenceTimer?.invalidate()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     func reset() {
