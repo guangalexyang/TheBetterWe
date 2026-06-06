@@ -33,7 +33,13 @@ final class ASRService: NSObject, ObservableObject {
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    // iOS 26 beta Simulator ships a corrupted zh-Hans mini.json; use en-US there for UI testing.
+    // On a real device this is always zh-Hans.
+    #if targetEnvironment(simulator)
+    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    #else
     private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-Hans"))
+    #endif
 
     private var hasSpeechStarted = false
     private var isCurrentlySilent = true   // tracks sound→silence transitions to avoid resetting timer every buffer
