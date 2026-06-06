@@ -38,7 +38,7 @@ final class ASRService: NSObject, ObservableObject {
     private var hasSpeechStarted = false
     private var noSpeechTimer: Timer?
     private var silenceTimer: Timer?
-    private let rmsThreshold: Float = 0.015
+    private let rmsThreshold: Float = 0.003   // low enough for Simulator mic; tune up on device if too sensitive
 
     // MARK: - Permissions
 
@@ -60,9 +60,11 @@ final class ASRService: NSObject, ObservableObject {
         reset()   // tears down previous engine and deactivates session
 
         // Activate session before creating engine so inputNode.outputFormat is valid.
+        // .playAndRecord is more stable than .record on Simulator (avoids I/O reconfig cycles).
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
+            try session.setCategory(.playAndRecord, mode: .measurement,
+                                    options: [.duckOthers, .allowBluetooth, .defaultToSpeaker])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             onError?(error)
@@ -90,6 +92,7 @@ final class ASRService: NSObject, ObservableObject {
         }
 
         do {
+            engine.prepare()
             try engine.start()
         } catch {
             onError?(error)
