@@ -101,7 +101,7 @@ struct VoiceInputView: View {
             Circle()
                 .fill(statusDotColor)
                 .frame(width: VoiceInputStyle.statusDotSize, height: VoiceInputStyle.statusDotSize)
-            Text(statusLabel)
+            statusText
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
         }
@@ -115,11 +115,16 @@ struct VoiceInputView: View {
         }
     }
 
-    private var statusLabel: LocalizedStringKey {
+    private var statusText: Text {
         switch voiceState {
-        case .listening:                  return "超时"
-        case .talking:                    return "聆听中"
-        case .stoppedMatch, .stoppedNoMatch: return "已停止"
+        case .listening:
+            return Text("超时")
+        case .talking:
+            return asr.engineLabel.isEmpty
+                ? Text("聆听中")
+                : Text("聆听中") + Text(verbatim: "[\(asr.engineLabel)]")
+        case .stoppedMatch, .stoppedNoMatch:
+            return Text("已停止")
         }
     }
 
@@ -357,7 +362,7 @@ private struct IntentCardView: View {
 // MARK: - ErrorCardView
 
 private struct ErrorCardView: View {
-    private let examples: [(tag: String, example: LocalizedStringKey)] = [
+    private let examples: [(tag: String, example: String)] = [
         ("加分", "给小明加10分"),
         ("扣分", "小红扣了5分"),
         ("兑换", "小明兑换了20分")
