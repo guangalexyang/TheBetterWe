@@ -4,6 +4,7 @@ import AVFoundation
 // MARK: - State machine
 
 enum VoiceInputState {
+    case bootstrapping    // State 0: connecting to ASR backend, spinner shown
     case listening        // State 1: auto-listening, orange countdown ring, 3s no-speech timer
     case talking          // State 2: audio above threshold, wave bars jump fast
     case stoppedMatch     // State 3: silence elapsed, stub intent card (future NLP)
@@ -21,6 +22,9 @@ struct VoiceInputView: View {
     @State private var countdownTimer: Timer?
     @State private var micRotation: Double = 0
     @State private var nudgeTimer: Timer?
+    #if DEBUG
+    @State private var showDiagnostic = false
+    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,11 +36,19 @@ struct VoiceInputView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
             Spacer()
-            WaveBarsView(audioLevel: asr.audioLevel, isActive: voiceState == .talking,
-                         isStopped: voiceState == .stoppedMatch || voiceState == .stoppedNoMatch)
-                .padding(.bottom, 12)
-            micRow
-                .padding(.bottom, 36)
+            if voiceState == .bootstrapping {
+                bootstrapSpinner
+                    .padding(.bottom, 48)
+                    .transition(.opacity)
+            } else {
+                WaveBarsView(audioLevel: asr.audioLevel, isActive: voiceState == .talking,
+                             isStopped: voiceState == .stoppedMatch || voiceState == .stoppedNoMatch)
+                    .padding(.bottom, 12)
+                    .transition(.opacity)
+                micRow
+                    .padding(.bottom, 36)
+                    .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
@@ -46,6 +58,17 @@ struct VoiceInputView: View {
             let isStopped = newState == .stoppedMatch || newState == .stoppedNoMatch
             isStopped ? startNudge() : stopNudge()
         }
+        .onChange(of: asr.engineLabel) { _, newLabel in
+            guard !newLabel.isEmpty, voiceState == .bootstrapping else { return }
+            withAnimation(.easeInOut(duration: 0.25)) { voiceState = .listening }
+            countdownProgress = 1.0
+            startCountdownAnimation(duration: 3)
+            asr.onNoSpeechTimeout = { self.dismiss() }
+            asr.arm(noSpeechTimeout: 3)
+        }
+        #if DEBUG
+        .sheet(isPresented: $showDiagnostic) { ASRDiagnosticView() }
+        #endif
         .alert("麦克风权限被拒绝", isPresented: $permissionDenied) {
             Button("Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -91,8 +114,8 @@ struct VoiceInputView: View {
 
     private var doneButtonColor: Color {
         switch voiceState {
-        case .listening, .stoppedNoMatch: return .secondary
-        case .talking, .stoppedMatch:     return VoiceInputStyle.appBlue
+        case .bootstrapping, .listening, .stoppedNoMatch: return .secondary
+        case .talking, .stoppedMatch:                     return VoiceInputStyle.appBlue
         }
     }
 
@@ -105,18 +128,24 @@ struct VoiceInputView: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
         }
+        #if DEBUG
+        .onLongPressGesture { showDiagnostic = true }
+        #endif
     }
 
     private var statusDotColor: Color {
         switch voiceState {
-        case .listening:                  return VoiceInputStyle.timerOrange
-        case .talking:                    return VoiceInputStyle.appBlue
+        case .bootstrapping:                 return .secondary
+        case .listening:                     return VoiceInputStyle.timerOrange
+        case .talking:                       return VoiceInputStyle.appBlue
         case .stoppedMatch, .stoppedNoMatch: return .secondary
         }
     }
 
     private var statusText: Text {
         switch voiceState {
+        case .bootstrapping:
+            return Text("连接中")
         case .listening:
             return Text("超时")
         case .talking:
@@ -133,6 +162,7 @@ struct VoiceInputView: View {
             let confirmed = asr.confirmedTranscript
             let interim = asr.interimTranscript
 
+            let isStopped = voiceState == .stoppedMatch || voiceState == .stoppedNoMatch
             if confirmed.isEmpty && interim.isEmpty {
                 Text("请开始说话…")
                     .font(.system(size: VoiceInputStyle.transcriptFontSize))
@@ -141,7 +171,7 @@ struct VoiceInputView: View {
             } else {
                 (Text(confirmed).foregroundColor(VoiceInputStyle.confirmedColor) +
                  Text(interim.isEmpty ? "" : (confirmed.isEmpty ? "" : " ") + interim)
-                    .foregroundColor(VoiceInputStyle.interimGray))
+                    .foregroundColor(isStopped ? VoiceInputStyle.confirmedColor : VoiceInputStyle.interimGray))
                     .font(.system(size: VoiceInputStyle.transcriptFontSize))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -153,6 +183,18 @@ struct VoiceInputView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var bootstrapSpinner: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .scaleEffect(1.4)
+                .tint(VoiceInputStyle.appBlue)
+            Text("连接中")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var micRow: some View {
@@ -190,26 +232,22 @@ struct VoiceInputView: View {
     }
 
     private func startSession() {
-        voiceState = .listening
-        countdownProgress = 1.0
-        startCountdownAnimation(duration: 3)
+        voiceState = .bootstrapping
 
         asr.onFirstSpeechDetected = {
+            guard self.voiceState != .bootstrapping else { return }
             withAnimation { self.voiceState = .talking }
             self.stopCountdown()
         }
 
         asr.onSilenceDetected = {
             self.asr.stopRecording()
-            // Phase 1: NLP not implemented — always show error card
             withAnimation { self.voiceState = .stoppedNoMatch }
         }
 
-        asr.onNoSpeechTimeout = {
-            self.dismiss()
-        }
+        // onNoSpeechTimeout wired in onChange(of: asr.engineLabel) after bootstrap completes.
 
-        asr.startListening(noSpeechTimeout: 3, silenceTimeout: 1.5)
+        asr.startListening(silenceTimeout: 1.5)
     }
 
     private func handleMicTap() {

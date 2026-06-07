@@ -140,7 +140,7 @@ export function handleASRUpgrade(ws: WebSocket, req: IncomingMessage): void {
   // --- Credential check ---
   const appId      = process.env.VOLCENGINE_ASR_APP_ID;
   const accessKey  = process.env.VOLCENGINE_ASR_TOKEN;
-  const resourceId = process.env.VOLCENGINE_ASR_RESOURCE_ID ?? 'volc.seedasr.sauc.duration';
+  const resourceId = process.env.VOLCENGINE_ASR_RESOURCE_ID ?? 'volc.bigasr.sauc.duration';
 
   if (!appId || !accessKey) {
     ws.send(JSON.stringify({ type: 'error', message: 'no_credentials' }));

@@ -29,11 +29,15 @@ final class VolcengineBackend: NSObject, ASRBackend {
 
     // MARK: - ASRBackend
 
+    private var sessionStart: Date = Date()
+
     func start(audioFormat: AVAudioFormat) throws {
         guard let token = AuthService.accessToken else {
+            print("[Volc] ❌ start — no auth token")
             throw ASRError.noAuthToken
         }
 
+        sessionStart = Date()
         audioConverter = AVAudioConverter(from: audioFormat, to: targetFormat)
 
         // Convert https → wss (or http → ws for local dev)
@@ -41,19 +45,24 @@ final class VolcengineBackend: NSObject, ASRBackend {
             .replacingOccurrences(of: "https://", with: "wss://")
             .replacingOccurrences(of: "http://", with: "ws://")
         guard let url = URL(string: "\(base)/asr/stream?token=\(token)") else {
+            print("[Volc] ❌ start — invalid URL")
             throw ASRError.invalidURL
         }
 
+        print("[Volc] start — connecting to \(base)/asr/stream")
         let session = URLSession(configuration: .default)
         let task = session.webSocketTask(with: url)
         webSocketTask = task
         task.resume()
 
-        // If the server doesn't respond within 2 seconds, fall back to Apple.
-        connectionTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
+        // If the server doesn't respond within 5 seconds, fall back to Apple.
+        connectionTimeoutTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: false) { [weak self] _ in
             guard let self, !self.isConnected else { return }
+            let elapsed = Date().timeIntervalSince(self.sessionStart)
+            print(String(format: "[Volc] ⏰ timeout fired at %.2fs — isConnected=false, firing onError", elapsed))
             self.onError?(ASRError.connectionTimeout)
         }
+        print("[Volc] 5s timeout timer armed")
 
         receiveLoop()
     }
@@ -71,8 +80,18 @@ final class VolcengineBackend: NSObject, ASRBackend {
     }
 
     func stop() {
-        connectionTimeoutTimer?.invalidate()
-        connectionTimeoutTimer = nil
+        let elapsed = Date().timeIntervalSince(sessionStart)
+        print(String(format: "[Volc] stop() called at %.2fs", elapsed))
+        // Timer must be invalidated on main thread (where it was created).
+        if Thread.isMainThread {
+            connectionTimeoutTimer?.invalidate()
+            connectionTimeoutTimer = nil
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.connectionTimeoutTimer?.invalidate()
+                self?.connectionTimeoutTimer = nil
+            }
+        }
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
         ringLock.lock()
@@ -91,7 +110,11 @@ final class VolcengineBackend: NSObject, ASRBackend {
                 self.handle(message: message)
                 self.receiveLoop()
             case .failure(let error):
-                guard !self.isConnected else { return }
+                let elapsed = Date().timeIntervalSince(self.sessionStart)
+                let connected = self.isConnected
+                print(String(format: "[Volc] receive failure at %.2fs isConnected=%@ error=%@",
+                              elapsed, connected ? "true" : "false", error.localizedDescription))
+                guard !connected else { return }
                 Task { @MainActor in self.onError?(error) }
             }
         }
@@ -103,16 +126,24 @@ final class VolcengineBackend: NSObject, ASRBackend {
               let msg = try? JSONDecoder().decode(ServerMessage.self, from: data)
         else { return }
 
+        let elapsed = Date().timeIntervalSince(sessionStart)
+        print(String(format: "[Volc] message at %.2fs type=%@", elapsed, msg.type))
+
         switch msg.type {
         case "connected":
-            connectionTimeoutTimer?.invalidate()
             ringLock.lock()
             let buffered = ringBuffer
             ringBuffer.removeAll()
             isConnected = true
             ringLock.unlock()
+            print(String(format: "[Volc] ✅ connected at %.2fs — flushing %d buffered frames", elapsed, buffered.count))
             for d in buffered { send(data: d) }
-            Task { @MainActor in self.onConnected?() }
+            Task { @MainActor in
+                // Invalidate on main thread — timer was created there and invalidate() is not thread-safe.
+                self.connectionTimeoutTimer?.invalidate()
+                self.connectionTimeoutTimer = nil
+                self.onConnected?()
+            }
 
         case "partial":
             Task { @MainActor in self.onPartialTranscript?(msg.text ?? "") }
@@ -121,11 +152,13 @@ final class VolcengineBackend: NSObject, ASRBackend {
             Task { @MainActor in self.onFinalTranscript?(msg.text ?? "") }
 
         case "error":
+            print(String(format: "[Volc] ❌ server error at %.2fs message=%@", elapsed, msg.message ?? "nil"))
             Task { @MainActor in
                 self.onError?(ASRError.serverError(msg.message ?? "unknown"))
             }
 
         default:
+            print(String(format: "[Volc] unknown message type=%@ at %.2fs", msg.type, elapsed))
             break
         }
     }

@@ -35,6 +35,7 @@ final class ASRService: NSObject, ObservableObject {
     private var noSpeechTimer: Timer?
     private var silenceTimer: Timer?
     private let rmsThreshold: Float = 0.015
+    private var silenceTimeout: TimeInterval = 1.5
 
     // MARK: - Permissions
 
@@ -52,8 +53,11 @@ final class ASRService: NSObject, ObservableObject {
 
     // MARK: - Lifecycle
 
-    func startListening(noSpeechTimeout: TimeInterval = 3, silenceTimeout: TimeInterval = 1.5) {
+    /// Start audio engine + WebSocket connection. Does NOT start the no-speech timer —
+    /// call arm(noSpeechTimeout:) once the backend signals it is ready (engineLabel becomes non-empty).
+    func startListening(silenceTimeout: TimeInterval = 1.5) {
         reset()
+        self.silenceTimeout = silenceTimeout
 
         let session = AVAudioSession.sharedInstance()
         do {
@@ -82,7 +86,7 @@ final class ASRService: NSObject, ObservableObject {
             let rms = Self.rms(buffer: buffer)
             Task { @MainActor in
                 self.audioLevel = min(rms / 0.1, 1.0)
-                self.handleAudioLevel(rms: rms, silenceTimeout: silenceTimeout)
+                self.handleAudioLevel(rms: rms)
             }
         }
 
@@ -97,10 +101,13 @@ final class ASRService: NSObject, ObservableObject {
         do {
             try volcengine.start(audioFormat: format)
         } catch {
-            // Immediate failure (e.g., no auth token) — skip to Apple now.
             fallbackToApple()
         }
+    }
 
+    /// Start the no-speech timeout. Call this after bootstrap completes (engineLabel is set).
+    func arm(noSpeechTimeout: TimeInterval) {
+        noSpeechTimer?.invalidate()
         noSpeechTimer = Timer.scheduledTimer(withTimeInterval: noSpeechTimeout, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self, !self.hasSpeechStarted else { return }
@@ -152,15 +159,15 @@ final class ASRService: NSObject, ObservableObject {
     }
 
     private func fallbackToApple() {
-        activeBackend?.stop()
         guard let format = capturedAudioFormat else { return }
+        activeBackend?.stop()
         let apple = AppleBackend()
         wire(backend: apple)
         activeBackend = apple
         try? apple.start(audioFormat: format)
     }
 
-    private func handleAudioLevel(rms: Float, silenceTimeout: TimeInterval) {
+    private func handleAudioLevel(rms: Float) {
         if rms > rmsThreshold {
             if isCurrentlySilent {
                 isCurrentlySilent = false
