@@ -12,6 +12,9 @@ struct PointSystemView: View {
     @State private var isLoading = false
     @State private var errorMessage: String? = nil
     @State private var navigateToAddChild = false
+    @State private var childToEdit: PSChild? = nil
+    @State private var childToDelete: PSChild? = nil
+    @State private var showDeleteConfirm = false
 
     private var safeIndex: Int { min(selectedIndex, max(0, children.count - 1)) }
     private var selectedChild: PSChild? { children.isEmpty ? nil : children[safeIndex] }
@@ -36,7 +39,9 @@ struct PointSystemView: View {
                                     children[idx].balance = newBalance
                                 }
                             },
-                            onLogOut: onLogOut
+                            onLogOut: onLogOut,
+                            onEdit: { childToEdit = child },
+                            onDelete: { childToDelete = child; showDeleteConfirm = true }
                         )
                         .id(child.id)
 
@@ -70,12 +75,79 @@ struct PointSystemView: View {
                 selectedIndex = children.count - 1
             }
         }
+        .navigationDestination(item: $childToEdit) { child in
+            AddChildView(familyId: membership.familyId, existingChild: child) { updated in
+                if let idx = children.firstIndex(where: { $0.memberId == updated.memberId }) {
+                    children[idx] = updated
+                }
+            }
+        }
+        .overlay {
+            if showDeleteConfirm, let child = childToDelete {
+                ZStack {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+
+                    deleteConfirmCard(child)
+                        .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .center)))
+                }
+            }
+        }
+        .animation(.easeOut(duration: 0.22), value: showDeleteConfirm)
         .task { await loadChildren() }
         .onChange(of: children) { _, newValue in
             if selectedIndex >= newValue.count {
                 selectedIndex = max(0, newValue.count - 1)
             }
         }
+    }
+
+    @ViewBuilder
+    private func deleteConfirmCard(_ child: PSChild) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(String(format: String(localized: "Delete %@?"), child.name))
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text("This will permanently remove all points, goals, and history for this child.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 8) {
+                Button {
+                    showDeleteConfirm = false
+                    Task { await performDeleteChild(child) }
+                } label: {
+                    Text("Delete")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(Color.red)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+
+                Button { showDeleteConfirm = false } label: {
+                    Text("Cancel")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(24)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .shadow(color: .black.opacity(0.12), radius: 24, y: 8)
+        .frame(maxWidth: 320)
+        .padding(.horizontal, 24)
     }
 
     private var memberGridSection: some View {
@@ -144,6 +216,15 @@ struct PointSystemView: View {
         .padding(.top, 60)
     }
 
+    private func performDeleteChild(_ child: PSChild) async {
+        do {
+            try await PointSystemService.deleteChild(familyId: membership.familyId, memberId: child.memberId)
+            children.removeAll { $0.memberId == child.memberId }
+        } catch {
+            // Network error — child stays in list, user can retry
+        }
+    }
+
     private func loadChildren() async {
         isLoading = true
         errorMessage = nil
@@ -206,6 +287,8 @@ private struct ChildCardView: View {
     let familyId: Int
     let onBalanceChange: (Int) -> Void
     let onLogOut: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
 
     private enum Sheet: Int, Identifiable {
         case deduct = 0
@@ -214,6 +297,8 @@ private struct ChildCardView: View {
     }
 
     @State private var activeSheet: Sheet? = nil
+    @State private var showChildMenu = false
+    @State private var menuVisible = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -233,9 +318,25 @@ private struct ChildCardView: View {
                             .font(.system(size: 24))
                     }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(verbatim: child.name)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
+                        HStack(spacing: 4) {
+                            Text(verbatim: child.name)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            Button {
+                                var t = Transaction()
+                                t.disablesAnimations = true
+                                withTransaction(t) { showChildMenu = true }
+                            } label: {
+                                Image(systemName: "arrowtriangle.down.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 5)
+                                    .background(Color(.systemGray5), in: Circle())
+                                    .contentShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                        }
                         if let age = ageString() {
                             Text(verbatim: age)
                                 .font(.caption)
@@ -318,6 +419,10 @@ private struct ChildCardView: View {
             .presentationDetents([.medium])
             .presentationDragIndicator(.hidden)
         }
+        .fullScreenCover(isPresented: $showChildMenu) {
+            childActionSheet
+                .presentationBackground(.clear)
+        }
     }
 
     private static let birthdayFormatter: DateFormatter = {
@@ -333,6 +438,77 @@ private struct ChildCardView: View {
         let years = Calendar.current.dateComponents([.year], from: date, to: .now).year ?? 0
         return String(format: String(localized: "%d years old"), years)
     }
+
+    private func dismissMenu(then action: (() -> Void)? = nil) {
+        withAnimation(.easeIn(duration: 0.2)) { menuVisible = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { showChildMenu = false }
+            action?()
+        }
+    }
+
+    @ViewBuilder
+    private var childActionSheet: some View {
+        ZStack(alignment: .bottom) {
+            Color.black
+                .opacity(menuVisible ? 0.4 : 0)
+                .ignoresSafeArea()
+                .onTapGesture { dismissMenu() }
+
+            VStack(spacing: 8) {
+                VStack(spacing: 0) {
+                    Button {
+                        dismissMenu {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { onEdit() }
+                        }
+                    } label: {
+                        Text("Edit")
+                            .font(.system(size: 17))
+                            .foregroundStyle(Color.accentColor)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 57)
+                    }
+                    .buttonStyle(.plain)
+                    Divider()
+                    Button {
+                        dismissMenu {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { onDelete() }
+                        }
+                    } label: {
+                        Text("Delete")
+                            .font(.system(size: 17))
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 57)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                Button { dismissMenu() } label: {
+                    Text("Cancel")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 57)
+                        .background(Color(.systemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 8)
+            .offset(y: menuVisible ? 0 : 300)
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.28)) { menuVisible = true }
+        }
+    }
+
+
 }
 
 // MARK: - GoalProgressSection

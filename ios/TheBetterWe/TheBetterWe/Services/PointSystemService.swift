@@ -159,6 +159,32 @@ enum PointSystemService {
         try await delete(path: "/families/\(familyId)/point-system/goals/\(goalId)")
     }
 
+    static func updateChild(
+        familyId: Int,
+        memberId: Int,
+        name: String,
+        gender: ChildGender?,
+        birthday: String?
+    ) async throws -> PSChild {
+        struct Body: Encodable {
+            let name: String
+            let gender: String?
+            let birthday: String?
+        }
+        let data = try await put(
+            path: "/families/\(familyId)/point-system/members/\(memberId)",
+            body: Body(name: name, gender: gender?.rawValue, birthday: birthday)
+        )
+        guard let child = try? JSONDecoder().decode(PSChild.self, from: data) else {
+            throw PointSystemError.network
+        }
+        return child
+    }
+
+    static func deleteChild(familyId: Int, memberId: Int) async throws {
+        try await delete(path: "/families/\(familyId)/point-system/members/\(memberId)")
+    }
+
     static func parseVoiceCommand(familyId: Int, utterance: String) async throws -> ParsedVoiceCommand {
         struct Body: Encodable {
             let utterance: String
@@ -237,6 +263,16 @@ enum PointSystemService {
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.httpBody = try? JSONEncoder().encode(body)
         return try await send(request, expectedStatus: expectedStatus)
+    }
+
+    private static func put<B: Encodable>(path: String, body: B) async throws -> Data {
+        guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
+        var request = URLRequest(url: try url(for: path))
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try? JSONEncoder().encode(body)
+        return try await send(request, expectedStatus: 200)
     }
 
     private static func delete(path: String) async throws {

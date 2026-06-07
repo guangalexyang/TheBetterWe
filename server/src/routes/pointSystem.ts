@@ -116,6 +116,79 @@ router.post('/:familyId/point-system/children', async (req: Request, res: Respon
   }
 });
 
+// PUT /families/:familyId/point-system/members/:memberId — edit child name/gender/birthday
+router.put('/:familyId/point-system/members/:memberId', async (req: Request, res: Response) => {
+  const familyId = parseInt(req.params.familyId, 10);
+  const memberId = parseIntParam(req.params.memberId);
+  const userId = req.auth!.sub;
+
+  if (memberId === null) { res.status(400).json({ error: 'invalid memberId' }); return; }
+  if (!(await isMember(familyId, userId))) { res.status(403).json({ error: 'not a member of this family' }); return; }
+
+  const { name, gender, birthday } = req.body as { name?: string; gender?: string; birthday?: string | null };
+
+  if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
+
+  const childRow = (await pool.query(
+    `SELECT fm.id FROM family_members fm
+     WHERE fm.id = $1 AND fm.family_id = $2
+       AND EXISTS (SELECT 1 FROM member_role_keywords k WHERE k.member_id = fm.id AND k.keyword = 'child')`,
+    [memberId, familyId]
+  )).rows[0];
+  if (!childRow) { res.status(404).json({ error: 'child not found in this family' }); return; }
+
+  const validGenders = ['boy', 'girl'];
+  const safeGender = gender && validGenders.includes(gender) ? gender : null;
+  const safeBirthday = birthday ?? null;
+
+  await pool.query(
+    'UPDATE family_members SET display_name = $1, gender = $2, birthday_date = $3 WHERE id = $4',
+    [name.trim(), safeGender, safeBirthday, memberId]
+  );
+
+  const balanceResult = (await pool.query(
+    'SELECT COALESCE(SUM(delta), 0)::INTEGER AS balance FROM point_events WHERE member_id = $1',
+    [memberId]
+  )).rows[0];
+
+  res.json({ memberId, name: name.trim(), gender: safeGender, birthday: safeBirthday, balance: balanceResult.balance as number });
+});
+
+// DELETE /families/:familyId/point-system/members/:memberId — delete child and all related data
+router.delete('/:familyId/point-system/members/:memberId', async (req: Request, res: Response) => {
+  const familyId = parseInt(req.params.familyId, 10);
+  const memberId = parseIntParam(req.params.memberId);
+  const userId = req.auth!.sub;
+
+  if (memberId === null) { res.status(400).json({ error: 'invalid memberId' }); return; }
+  if (!(await isMember(familyId, userId))) { res.status(403).json({ error: 'not a member of this family' }); return; }
+
+  const childRow = (await pool.query(
+    `SELECT fm.id FROM family_members fm
+     WHERE fm.id = $1 AND fm.family_id = $2
+       AND EXISTS (SELECT 1 FROM member_role_keywords k WHERE k.member_id = fm.id AND k.keyword = 'child')`,
+    [memberId, familyId]
+  )).rows[0];
+  if (!childRow) { res.status(404).json({ error: 'child not found in this family' }); return; }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM point_events WHERE member_id = $1', [memberId]);
+    await client.query('DELETE FROM point_goals WHERE member_id = $1', [memberId]);
+    await client.query('DELETE FROM member_role_keywords WHERE member_id = $1', [memberId]);
+    await client.query('DELETE FROM family_members WHERE id = $1', [memberId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  res.status(204).send();
+});
+
 // POST /families/:familyId/point-system/events
 router.post('/:familyId/point-system/events', async (req: Request, res: Response) => {
   const familyId = parseInt(req.params.familyId, 10);

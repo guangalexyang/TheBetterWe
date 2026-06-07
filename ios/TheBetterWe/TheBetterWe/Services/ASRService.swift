@@ -3,8 +3,8 @@ import AVFoundation
 import Speech
 import Combine
 
-/// Transcription + audio recording service.
-/// To swap in Volcengine ASR: replace only the SFSpeechRecognizer block in startListening().
+/// Owns the audio engine and silence detection. Delegates transcription to ASRBackend.
+/// Tries VolcengineBackend first; falls back to AppleBackend automatically on any error.
 @MainActor
 final class ASRService: NSObject, ObservableObject {
 
@@ -14,38 +14,28 @@ final class ASRService: NSObject, ObservableObject {
     @Published private(set) var confirmedTranscript: String = ""
     /// Normalized RMS 0.0…1.0 for wave bar animation.
     @Published private(set) var audioLevel: Float = 0
+    /// Short label for the active engine — "火山" or "Apple". Empty until the backend connects.
+    @Published private(set) var engineLabel: String = ""
 
-    // MARK: - Silence-detection callbacks
+    // MARK: - Callbacks (set by VoiceInputView before calling startListening)
 
-    /// Fires once when audio first exceeds the RMS threshold (cancels the no-speech timer).
     var onFirstSpeechDetected: (() -> Void)?
-    /// Fires when silence persists for `silenceTimeout` after speech began.
     var onSilenceDetected: (() -> Void)?
-    /// Fires when no audio exceeds threshold within `noSpeechTimeout` of start.
     var onNoSpeechTimeout: (() -> Void)?
-    /// Fires on non-recoverable errors (engine start failure).
     var onError: ((Error) -> Void)?
 
     // MARK: - Private
 
-    // Fresh instance each session — reusing a stopped AVAudioEngine leaves inputNode
-    // format at 0/0 which causes installTap to crash with IsFormatSampleRateAndChannelCountValid.
     private var audioEngine: AVAudioEngine?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    // iOS 26 beta Simulator ships a corrupted zh-Hans mini.json; use en-US there for UI testing.
-    // On a real device this is always zh-Hans.
-    #if targetEnvironment(simulator)
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    #else
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-Hans"))
-    #endif
+    private var activeBackend: (any ASRBackend)?
+    private var capturedAudioFormat: AVAudioFormat?
 
     private var hasSpeechStarted = false
-    private var isCurrentlySilent = true   // tracks sound→silence transitions to avoid resetting timer every buffer
+    private var isCurrentlySilent = true
     private var noSpeechTimer: Timer?
     private var silenceTimer: Timer?
-    private let rmsThreshold: Float = 0.015   // tuned for real device ambient noise; Simulator mic is near-silent so any value works there
+    private let rmsThreshold: Float = 0.015
+    private var silenceTimeout: TimeInterval = 1.5
 
     // MARK: - Permissions
 
@@ -63,15 +53,14 @@ final class ASRService: NSObject, ObservableObject {
 
     // MARK: - Lifecycle
 
-    func startListening(noSpeechTimeout: TimeInterval = 3, silenceTimeout: TimeInterval = 1.5) {
-        reset()   // tears down previous engine and deactivates session
+    /// Start audio engine + WebSocket connection. Does NOT start the no-speech timer —
+    /// call arm(noSpeechTimeout:) once the backend signals it is ready (engineLabel becomes non-empty).
+    func startListening(silenceTimeout: TimeInterval = 1.5) {
+        reset()
+        self.silenceTimeout = silenceTimeout
 
-        // Activate session before creating engine so inputNode.outputFormat is valid.
-        // .playAndRecord is more stable than .record on Simulator (avoids I/O reconfig cycles).
         let session = AVAudioSession.sharedInstance()
         do {
-            // .default mode preserves AGC + noise reduction that SFSpeechRecognizer depends on.
-            // .measurement disables those, causing the recognizer to return no partial results.
             try session.setCategory(.playAndRecord, mode: .default, options: .duckOthers)
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
@@ -82,20 +71,22 @@ final class ASRService: NSObject, ObservableObject {
         let engine = AVAudioEngine()
         audioEngine = engine
 
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        recognitionRequest = request
-
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+        capturedAudioFormat = format
+
+        // Wire Volcengine first. If it fails (sync throw or async onError), fall back to Apple.
+        let volcengine = VolcengineBackend()
+        wire(backend: volcengine)
+        activeBackend = volcengine
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             guard let self else { return }
-            request.append(buffer)
+            self.activeBackend?.appendBuffer(buffer)
             let rms = Self.rms(buffer: buffer)
             Task { @MainActor in
                 self.audioLevel = min(rms / 0.1, 1.0)
-                self.handleAudioLevel(rms: rms, silenceTimeout: silenceTimeout)
+                self.handleAudioLevel(rms: rms)
             }
         }
 
@@ -107,20 +98,16 @@ final class ASRService: NSObject, ObservableObject {
             return
         }
 
-        recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
-            if let error { print("[ASR] recognition error: \(error)") }
-            guard let self, let result else { return }
-            let text = result.bestTranscription.formattedString
-            Task { @MainActor in
-                if result.isFinal {
-                    self.confirmedTranscript = text
-                    self.interimTranscript = ""
-                } else {
-                    self.interimTranscript = text
-                }
-            }
+        do {
+            try volcengine.start(audioFormat: format)
+        } catch {
+            fallbackToApple()
         }
+    }
 
+    /// Start the no-speech timeout. Call this after bootstrap completes (engineLabel is set).
+    func arm(noSpeechTimeout: TimeInterval) {
+        noSpeechTimer?.invalidate()
         noSpeechTimer = Timer.scheduledTimer(withTimeInterval: noSpeechTimeout, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self, !self.hasSpeechStarted else { return }
@@ -133,8 +120,7 @@ final class ASRService: NSObject, ObservableObject {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
-        recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
+        activeBackend?.stop()
         noSpeechTimer?.invalidate()
         silenceTimer?.invalidate()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -145,20 +131,47 @@ final class ASRService: NSObject, ObservableObject {
         interimTranscript = ""
         confirmedTranscript = ""
         audioLevel = 0
+        engineLabel = ""
         hasSpeechStarted = false
         isCurrentlySilent = true
-        recognitionRequest = nil
-        recognitionTask = nil
+        activeBackend = nil
+        capturedAudioFormat = nil
     }
 
     // MARK: - Private
 
-    private func handleAudioLevel(rms: Float, silenceTimeout: TimeInterval) {
+    private func wire(backend: any ASRBackend) {
+        // Capture label as a value to avoid a retain cycle (backend → closure → backend).
+        let label = backend.engineLabel
+        backend.onConnected = { [weak self] in
+            self?.engineLabel = label
+        }
+        backend.onPartialTranscript = { [weak self] text in
+            self?.interimTranscript = text
+        }
+        backend.onFinalTranscript = { [weak self] text in
+            self?.confirmedTranscript = text
+            self?.interimTranscript = ""
+        }
+        backend.onError = { [weak self] _ in
+            self?.fallbackToApple()
+        }
+    }
+
+    private func fallbackToApple() {
+        guard let format = capturedAudioFormat else { return }
+        activeBackend?.stop()
+        let apple = AppleBackend()
+        wire(backend: apple)
+        activeBackend = apple
+        try? apple.start(audioFormat: format)
+    }
+
+    private func handleAudioLevel(rms: Float) {
         if rms > rmsThreshold {
-            // Sound detected
             if isCurrentlySilent {
                 isCurrentlySilent = false
-                silenceTimer?.invalidate()   // cancel any running silence timer
+                silenceTimer?.invalidate()
             }
             if !hasSpeechStarted {
                 hasSpeechStarted = true
@@ -166,7 +179,6 @@ final class ASRService: NSObject, ObservableObject {
                 onFirstSpeechDetected?()
             }
         } else {
-            // Below threshold — only arm the silence timer on the sound→silence transition
             if hasSpeechStarted && !isCurrentlySilent {
                 isCurrentlySilent = true
                 silenceTimer?.invalidate()

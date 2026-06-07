@@ -118,6 +118,16 @@ TheBetterWe/
 
 ## Technical Patterns & Gotchas
 
+### iOS — Audio (AVAudioEngine + ASRBackend)
+
+- **ASRBackend protocol:** `ASRService` holds `activeBackend: (any ASRBackend)?`. Conformers: `AppleBackend` (SFSpeechRecognizer) and `VolcengineBackend` (WebSocket relay). `wire(backend:)` attaches callbacks. `onError` triggers `fallbackToApple()` automatically.
+- **Retain cycle in wire():** Capture `let label = backend.engineLabel` as a `String` value before the closure — never capture `backend` inside its own `onConnected` closure or you get a retain cycle.
+- **appendBuffer thread safety:** The AVAudioEngine tap calls `appendBuffer` from the audio thread. Backends that buffer data (e.g. `VolcengineBackend` ring buffer) must protect mutable state with `NSLock`.
+- **engineLabel:** `@Published private(set) var engineLabel: String` on `ASRService`; empty until backend connects. `VoiceInputView` shows `聆听中[火山]` or `聆听中[Apple]` using `Text("聆听中") + Text(verbatim: "[…]")` — never string interpolation inside a single `Text()`.
+- **ASR bootstrap — decouple startListening from noSpeechTimer:** `startListening(silenceTimeout:)` starts audio engine + WebSocket but does NOT start noSpeechTimer. Call `arm(noSpeechTimeout:)` only after `engineLabel` becomes non-empty (i.e. `onConnected` fired). In `VoiceInputView`, use `.onChange(of: asr.engineLabel)` guarded by `voiceState == .bootstrapping` to trigger `arm()` + transition to `.listening`. Starting the timer before bootstrap would dismiss the sheet during fly.io cold start.
+- **fly.io cold start — minimum 5s timeout:** fly.io machines auto-stop when idle; cold start takes 1–3s. Any connection timeout to `thebetterwe-api.fly.dev` (WebSocket or HTTP) must be **≥ 5 seconds**. `VolcengineBackend` uses 5s. The WebSocket upgrade itself wakes fly.io — no separate ping endpoint needed. `onConnected` IS the signal that fly.io is up AND Volcengine is ready.
+- **ASRDiagnosticView:** DEBUG-only in-app integration test at `Views/Voice/ASRDiagnosticView.swift`. Long-press the status label in `VoiceInputView` to open it. Logs in as `test/admin123`, injects synthetic PCM audio, shows the full event timeline on screen. Use this to debug connection issues without Xcode.
+
 ### iOS — Audio (AVAudioEngine + SFSpeechRecognizer)
 - **Fresh engine per session:** Never reuse a stopped `AVAudioEngine`. After `stop()`, `inputNode.outputFormat(forBus:)` returns 0 sample rate/channels, crashing `installTap`. Create `let engine = AVAudioEngine()` fresh each call to `startListening`.
 - **Session before engine:** Activate `AVAudioSession` before creating the engine — `inputNode.outputFormat` is 0/0 if the session isn't active when queried.
@@ -146,6 +156,8 @@ TheBetterWe/
 - **DatePicker compact in sheets:** Always add `.fixedSize()` to `DatePicker(.compact)` — without it the picker's intrinsic width inflates the parent layout and can widen the sheet.
 - **GeometryReader in .background():** Never use `GeometryReader` inside `.background()` on any view that contains a `TextField`. It creates UIKit Auto Layout views that conflict with the keyboard's internal constraints, producing `UIViewAlertForUnsatisfiableConstraints` on every tap.
 - **lineLimit ternary:** `.lineLimit(isX ? 1...5 : 1)` is a type error. Use `.lineLimit(isX ? 1...5 : 1...1)` — both branches must be `ClosedRange<Int>`.
+- **iOS 26 — confirmationDialog and alert are liquid glass:** On iOS 26, `confirmationDialog` and `alert` render as the new liquid glass context menu, not a classic action sheet or centered alert. For bottom action sheet style, use `fullScreenCover` with a custom `ZStack` (dark backdrop + white grouped cards + Cancel). For centered confirmation dialogs, use a `.overlay { ZStack { Color.black.opacity(0.4).ignoresSafeArea(); card } }` with `.animation(.easeOut, value: showConfirm)` and `.transition(.opacity.combined(with: .scale(scale: 0.92)))` on the card.
+- **Custom action sheet split animation:** `fullScreenCover` slides all content as one unit. To animate the backdrop (fade) and cards (slide up) independently: (1) trigger with `Transaction.disablesAnimations = true` to suppress the cover's built-in slide, (2) use a separate `@State var menuVisible` inside the cover content, (3) `.onAppear { withAnimation(.easeOut(duration: 0.28)) { menuVisible = true } }` drives `Color.black.opacity(menuVisible ? 0.4 : 0)` and `.offset(y: menuVisible ? 0 : 300)` on the cards, (4) dismiss by animating `menuVisible = false` first, then closing the cover after a short delay with another `disablesAnimations` transaction.
 
 ### iOS — Models
 - All PostgreSQL timestamp columns are `INTEGER` (Unix epoch via `EXTRACT(EPOCH FROM NOW())::INTEGER`). Decode as `Int`, never `String`.
@@ -153,6 +165,13 @@ TheBetterWe/
 - **Activity date display — use `createdAt`, not `eventDate`:** For showing when an activity happened, use `Date(timeIntervalSince1970: TimeInterval(createdAt))`. Never parse the `eventDate` YYYY-MM-DD string as UTC midnight for display — for UTC-N users, midnight UTC on date D is still D-1 locally, causing today's events to show as "Yesterday".
 - **Date-only display:** Use `setLocalizedDateFormatFromTemplate("MMMd")` (or `"MMMdyyyy"` for cross-year dates) for all user-facing date strings — it automatically adds locale-specific suffixes like "日" in Chinese. Never hardcode `dateFormat = "MMM d"`.
 - **Timezone-correct period queries:** iOS must send the device's local date as `?localDate=YYYY-MM-DD` on any request whose result depends on "today / this week / this month". Use `localDateString()` (defined in `PointSystemService.swift`) for this. Also pass `date: localDateString()` in POST bodies for event records so `event_date` stores device local date.
+
+### Server — WebSocket (ASR proxy)
+- **WebSocket upgrade:** Use `http.createServer(app)` + `WebSocketServer({ noServer: true })`. Handle upgrades via `server.on('upgrade', ...)` and route by pathname. `app.listen()` does not support WebSocket upgrades.
+- **Volcengine binary protocol:** Frames are `[4-byte header][4-byte size][gzip payload]`. Full server response adds a 4-byte sequence before size. Use `gzipSync`/`gunzipSync` from Node built-in `zlib`. No extra npm package needed.
+- **Auth for WebSocket:** Token passed as `?token=<jwt>` query param (HTTP headers not available after upgrade in most clients). Validate with `jwt.verify` before doing anything else.
+- **Rate limit by user ID, not IP:** Families may share an IP. Track `Map<userId, sessionCount>`. Also enforce a per-session hard timeout (60s) via `setTimeout` to prevent runaway billing.
+- **Cleanup pattern:** Always attach both `ws.on('close', cleanup)` and `ws.on('error', cleanup)` and define `cleanup` before registering them to avoid double-counting.
 
 ### Server
 - All new tables must use `INTEGER` epoch timestamps, not `timestamptz`.
@@ -162,6 +181,7 @@ TheBetterWe/
 - Always guard `parseInt` params with a NaN check (`parseIntParam` helper) and return 400 before running SQL.
 - `pg.Pool` requires `.on('error', ...)` handler — idle client errors without it crash the process.
 - Feature toggles live in `src/routes/featureToggles.ts` (in-memory object). No JSON file.
+- **Cascading deletes — order matters:** Delete child tables before the parent row inside a BEGIN/COMMIT transaction. For a child member: `point_events` → `point_goals` → `member_role_keywords` → `family_members`. Foreign key constraints prevent deleting the parent first.
 
 ## UI
 
@@ -174,8 +194,11 @@ Build UI **view by view** — never scaffold multiple views at once without user
    - ✅ Siri App Intents — AddPointsIntent + DeductPointsIntent (Chinese + English phrases)
    - ✅ App display name: **诺米** (`INFOPLIST_KEY_CFBundleDisplayName` in pbxproj)
    - ✅ Point System goals — create, lifespan (daily/weekly/monthly/one-time), period progress, fulfilled UI
-   - ✅ Voice Input ASR sheet — `+` tab bar button opens 5-state bottom sheet; `AVAudioEngine` + `SFSpeechRecognizer` (zh-Hans on device); silence detection, error card, mic nudge animation; architecture ready for Volcengine ASR drop-in swap
-   - 🔜 Volcengine ASR — swap `SFSpeechRecognizer` for Volcengine in `ASRService.swift` (credentials needed)
+   - ✅ Voice Input ASR sheet — `+` tab bar button opens 5-state bottom sheet; `AVAudioEngine` + `SFSpeechRecognizer` (zh-Hans on device); silence detection, error card, mic nudge animation
+   - ✅ Volcengine ASR — full server proxy at `/asr/stream` WebSocket; `ASRBackend` protocol with `AppleBackend` + `VolcengineBackend`; status label shows `聆听中[火山]` or `聆听中[Apple]`; falls back to Apple automatically; credentials set (`APP_ID=3598972451`, resource `volc.bigasr.sauc.duration`), deployed and active
+   - ✅ ASR bootstrap flow — `VoiceInputState.bootstrapping` shows spinner + "连接中" while fly.io wakes and Volcengine connects; `startListening()` does not start noSpeechTimer; `arm(noSpeechTimeout:)` called in `onChange(of: engineLabel)` once non-empty; `ASRDiagnosticView` (DEBUG, long-press status label) for in-app connection testing
+   - ✅ Child edit/delete — ▼ badge trigger in ChildCardView; AddChildView reused for edit mode (title always "宝宝信息"); server PUT + cascading DELETE routes; **server deploy pending**
+   - ✅ Child card action menu — custom bottom action sheet (`fullScreenCover`, split fade/slide animation); delete confirmation is custom centered card overlay (not system alert)
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
 3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
 4. **Phase 4** — Doubao API (in-app natural language point recording)
