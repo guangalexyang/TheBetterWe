@@ -2,7 +2,8 @@ import SwiftUI
 
 struct AddChildView: View {
     let familyId: Int
-    let onAdd: (PSChild) -> Void
+    var existingChild: PSChild? = nil
+    let onSave: (PSChild) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedGender: ChildGender? = nil
@@ -12,6 +13,8 @@ struct AddChildView: View {
     @State private var name = ""
     @State private var isLoading = false
     @State private var errorMessage: String? = nil
+
+    private var isEditMode: Bool { existingChild != nil }
 
     private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
 
@@ -91,7 +94,23 @@ struct AddChildView: View {
                         DatePicker("", selection: $birthday, displayedComponents: .date)
                             .datePickerStyle(.graphical)
                             .padding(.top, 4)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        HStack {
+                            Spacer()
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.2)) { showDatePicker = false }
+                            } label: {
+                                Text("Confirm")
+                                    .font(.subheadline.bold())
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 8)
+                                    .background(Color.primary)
+                                    .foregroundStyle(Color(UIColor.systemBackground))
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.bottom, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
                     // Nickname
@@ -122,13 +141,13 @@ struct AddChildView: View {
                     }
 
                     Button {
-                        submitAddChild()
+                        submitChild()
                     } label: {
                         Group {
                             if isLoading {
                                 ProgressView().tint(Color(UIColor.systemBackground))
                             } else {
-                                Text("Add Child")
+                                Text(isEditMode ? "Save Changes" : "Add Child")
                                     .font(.body.bold())
                             }
                         }
@@ -149,21 +168,42 @@ struct AddChildView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+        .onAppear {
+            guard let child = existingChild else { return }
+            name = child.name
+            selectedGender = child.gender
+            if let bday = child.birthday,
+               let date = Self.isoFormatter.date(from: bday) {
+                birthday = date
+                hasBirthday = true
+            }
+        }
     }
 
-    private func submitAddChild() {
+    private func submitChild() {
         isLoading = true
         errorMessage = nil
         let birthdayStr = hasBirthday ? Self.isoFormatter.string(from: birthday) : nil
         Task {
             do {
-                let child = try await PointSystemService.addChild(
-                    familyId: familyId,
-                    name: trimmed,
-                    gender: selectedGender,
-                    birthday: birthdayStr
-                )
-                onAdd(child)
+                let child: PSChild
+                if let existing = existingChild {
+                    child = try await PointSystemService.updateChild(
+                        familyId: familyId,
+                        memberId: existing.memberId,
+                        name: trimmed,
+                        gender: selectedGender,
+                        birthday: birthdayStr
+                    )
+                } else {
+                    child = try await PointSystemService.addChild(
+                        familyId: familyId,
+                        name: trimmed,
+                        gender: selectedGender,
+                        birthday: birthdayStr
+                    )
+                }
+                onSave(child)
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription

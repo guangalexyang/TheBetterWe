@@ -5,7 +5,7 @@ enum ChildGender: String, CaseIterable, Codable {
     case boy, girl
 }
 
-struct PSChild: Identifiable, Equatable, Codable {
+struct PSChild: Identifiable, Equatable, Hashable, Codable {
     let memberId: Int
     let name: String
     let gender: ChildGender?
