@@ -24,7 +24,7 @@ struct RecordPointsIntent: AppIntent, ForegroundContinuableIntent {
             // 1. Auth + parent check
             let membership = try await PointsIntentSupport.requireParentMembership()
 
-            // 2. Parse utterance via server → Gemini
+            // 2. Parse utterance via server → Doubao
             let parsed = try await PointsIntentSupport.parseVoiceCommand(
                 utterance: command,
                 familyId: membership.familyId

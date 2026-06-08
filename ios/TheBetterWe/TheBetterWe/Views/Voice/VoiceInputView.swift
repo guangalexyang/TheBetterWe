@@ -4,28 +4,29 @@ import AVFoundation
 // MARK: - State machine
 
 enum VoiceInputState {
-    case bootstrapping    // State 0: connecting to ASR backend, spinner shown
-    case listening        // State 1: auto-listening, orange countdown ring, 3s no-speech timer
-    case talking          // State 2: audio above threshold, wave bars jump fast
-    case stoppedMatch     // State 3: silence elapsed, stub intent card (future NLP)
-    case stoppedNoMatch   // State 4: silence elapsed, error card
+    case bootstrapping    // connecting to ASR backend
+    case listening        // waiting for speech, 3s countdown ring
+    case talking          // audio above threshold
+    case parsing          // silence detected, LLM call in flight
+    case parsed           // LLM returned high confidence — show IntentCard
+    case parseFailed      // LLM returned low confidence or failed — show ErrorCard
 }
 
 // MARK: - VoiceInputView
 
 struct VoiceInputView: View {
+    let familyId: Int
+
     @Environment(\.dismiss) private var dismiss
     @StateObject private var asr = ASRService()
-    @State private var voiceState: VoiceInputState = .listening
+    @State private var voiceState: VoiceInputState = .bootstrapping
+    @State private var parsedResult: VoiceTranscriptResult? = nil
+    @State private var parseDebugInfo: String = ""
     @State private var permissionDenied = false
     @State private var countdownProgress: CGFloat = 1.0
     @State private var countdownTimer: Timer?
     @State private var micRotation: Double = 0
     @State private var nudgeTimer: Timer?
-    #if DEBUG
-    @State private var showDiagnostic = false
-    #endif
-
     var body: some View {
         VStack(spacing: 0) {
             dragHandle
@@ -42,7 +43,7 @@ struct VoiceInputView: View {
                     .transition(.opacity)
             } else {
                 WaveBarsView(audioLevel: asr.audioLevel, isActive: voiceState == .talking,
-                             isStopped: voiceState == .stoppedMatch || voiceState == .stoppedNoMatch)
+                             isStopped: voiceState == .parsing || voiceState == .parsed || voiceState == .parseFailed)
                     .padding(.bottom, 12)
                     .transition(.opacity)
                 micRow
@@ -55,7 +56,7 @@ struct VoiceInputView: View {
         .onAppear { beginListening() }
         .onDisappear { asr.stopRecording(); stopNudge() }
         .onChange(of: voiceState) { _, newState in
-            let isStopped = newState == .stoppedMatch || newState == .stoppedNoMatch
+            let isStopped = newState == .parsed || newState == .parseFailed
             isStopped ? startNudge() : stopNudge()
         }
         .onChange(of: asr.engineLabel) { _, newLabel in
@@ -66,9 +67,6 @@ struct VoiceInputView: View {
             asr.onNoSpeechTimeout = { self.dismiss() }
             asr.arm(noSpeechTimeout: 3)
         }
-        #if DEBUG
-        .sheet(isPresented: $showDiagnostic) { ASRDiagnosticView() }
-        #endif
         .alert("麦克风权限被拒绝", isPresented: $permissionDenied) {
             Button("Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -102,21 +100,17 @@ struct VoiceInputView: View {
             Spacer()
             statusIndicator
             Spacer()
-            // Done button — visible but no-op in Phase 1 (NLP not yet implemented)
-            Button {} label: {
-                Text("Done")
+            Button { handleConfirm() } label: {
+                Text("Confirm")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(doneButtonColor)
+                    .foregroundStyle(confirmButtonColor)
             }
-            .disabled(true)
+            .disabled(voiceState != .parsed)
         }
     }
 
-    private var doneButtonColor: Color {
-        switch voiceState {
-        case .bootstrapping, .listening, .stoppedNoMatch: return .secondary
-        case .talking, .stoppedMatch:                     return VoiceInputStyle.appBlue
-        }
+    private var confirmButtonColor: Color {
+        voiceState == .parsed ? VoiceInputStyle.appBlue : .secondary
     }
 
     private var statusIndicator: some View {
@@ -128,17 +122,14 @@ struct VoiceInputView: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
         }
-        #if DEBUG
-        .onLongPressGesture { showDiagnostic = true }
-        #endif
     }
 
     private var statusDotColor: Color {
         switch voiceState {
-        case .bootstrapping:                 return .secondary
-        case .listening:                     return VoiceInputStyle.timerOrange
-        case .talking:                       return VoiceInputStyle.appBlue
-        case .stoppedMatch, .stoppedNoMatch: return .secondary
+        case .bootstrapping:                          return .secondary
+        case .listening:                              return VoiceInputStyle.timerOrange
+        case .talking:                                return VoiceInputStyle.appBlue
+        case .parsing, .parsed, .parseFailed:         return .secondary
         }
     }
 
@@ -147,12 +138,12 @@ struct VoiceInputView: View {
         case .bootstrapping:
             return Text("连接中")
         case .listening:
-            return Text("超时")
+            return Text("等待中")
         case .talking:
             return asr.engineLabel.isEmpty
                 ? Text("聆听中")
-                : Text("聆听中") + Text(verbatim: "[\(asr.engineLabel)]")
-        case .stoppedMatch, .stoppedNoMatch:
+                : Text("聆听中") + Text(verbatim: "[") + Text(LocalizedStringKey(asr.engineLabel)) + Text(verbatim: "]")
+        case .parsing, .parsed, .parseFailed:
             return Text("已停止")
         }
     }
@@ -162,8 +153,8 @@ struct VoiceInputView: View {
             let confirmed = asr.confirmedTranscript
             let interim = asr.interimTranscript
 
-            let isStopped = voiceState == .stoppedMatch || voiceState == .stoppedNoMatch
-            if confirmed.isEmpty && interim.isEmpty {
+            let isStopped = voiceState == .parsing || voiceState == .parsed || voiceState == .parseFailed
+            if confirmed.isEmpty && interim.isEmpty && voiceState != .bootstrapping {
                 Text("请开始说话…")
                     .font(.system(size: VoiceInputStyle.transcriptFontSize))
                     .foregroundStyle(.secondary)
@@ -176,13 +167,25 @@ struct VoiceInputView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            if voiceState == .stoppedMatch {
-                IntentCardView().padding(.top, 8)
-            } else if voiceState == .stoppedNoMatch {
-                ErrorCardView().padding(.top, 8)
+            if voiceState == .parsing || voiceState == .parsed || voiceState == .parseFailed {
+                llmStatusLabel
+                    .padding(.top, 4)
+            }
+
+            if voiceState == .parsed, let result = parsedResult {
+                IntentCardView(result: result).padding(.top, 8)
+            } else if voiceState == .parseFailed {
+                ErrorCardView(debugInfo: parseDebugInfo).padding(.top, 8)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var llmStatusLabel: some View {
+        (Text(verbatim: "[") + Text(LocalizedStringKey("豆包")) + Text(verbatim: "] ") +
+         Text(voiceState == .parsing ? LocalizedStringKey("分析中…") : LocalizedStringKey("分析完成")))
+            .font(.system(size: 13))
+            .foregroundStyle(.secondary)
     }
 
     private var bootstrapSpinner: some View {
@@ -242,7 +245,8 @@ struct VoiceInputView: View {
 
         asr.onSilenceDetected = {
             self.asr.stopRecording()
-            withAnimation { self.voiceState = .stoppedNoMatch }
+            withAnimation { self.voiceState = .parsing }
+            Task { await self.parseTranscript() }
         }
 
         // onNoSpeechTimeout wired in onChange(of: asr.engineLabel) after bootstrap completes.
@@ -251,9 +255,62 @@ struct VoiceInputView: View {
     }
 
     private func handleMicTap() {
-        guard voiceState == .stoppedMatch || voiceState == .stoppedNoMatch else { return }
+        guard voiceState == .parsed || voiceState == .parseFailed else { return }
+        parsedResult = nil
         asr.reset()
         startSession()
+    }
+
+    private func parseTranscript() async {
+        let transcript = asr.confirmedTranscript.isEmpty
+            ? asr.interimTranscript
+            : asr.confirmedTranscript
+        guard !transcript.isEmpty else {
+            await MainActor.run {
+                parseDebugInfo = "sent: (empty)"
+                withAnimation { voiceState = .parseFailed }
+            }
+            return
+        }
+        do {
+            let result = try await PointSystemService.parseTranscript(
+                familyId: familyId,
+                transcript: transcript
+            )
+            print("[voice] parse result: confidence=\(result.confidence) member=\(result.memberName ?? "nil") delta=\(result.delta.map(String.init) ?? "nil") debug=\(result._debug ?? "-")")
+            await MainActor.run {
+                parsedResult = result
+                var info = "sent: \(transcript)\nconfidence: \(result.confidence)"
+                if let d = result._debug { info += "\n\(d)" }
+                parseDebugInfo = info
+                withAnimation { voiceState = result.isHighConfidence ? .parsed : .parseFailed }
+            }
+        } catch {
+            print("[voice] parseTranscript error: \(error)")
+            await MainActor.run {
+                parseDebugInfo = "sent: \(transcript)\nerror: \(error)"
+                withAnimation { voiceState = .parseFailed }
+            }
+        }
+    }
+
+    private func handleConfirm() {
+        guard voiceState == .parsed,
+              let result = parsedResult,
+              let memberId = result.memberId,
+              let delta = result.delta else { return }
+        Task {
+            do {
+                _ = try await PointSystemService.addPointEvent(
+                    familyId: familyId,
+                    memberId: memberId,
+                    delta: delta,
+                    note: result.note,
+                    date: result.date ?? localDateString()
+                )
+            } catch { /* errors dismissed silently — user can retry */ }
+            await MainActor.run { dismiss() }
+        }
     }
 
     private func startCountdownAnimation(duration: TimeInterval) {
@@ -373,21 +430,45 @@ private struct CountdownRingView: View {
     }
 }
 
-// MARK: - IntentCardView (stub — wired up when NLP is implemented in Phase 4)
+// MARK: - IntentCardView
 
 private struct IntentCardView: View {
+    let result: VoiceTranscriptResult
+
+    private var deltaText: String {
+        guard let d = result.delta else { return "" }
+        return d > 0 ? "+\(d) 分" : "\(d) 分"
+    }
+
+    private var deltaColor: Color {
+        guard let d = result.delta else { return .primary }
+        return d > 0 ? VoiceInputStyle.appBlue : VoiceInputStyle.timerOrange
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             RoundedRectangle(cornerRadius: 2)
                 .fill(VoiceInputStyle.intentCardBorder)
                 .frame(width: 3)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("✓ 积分记录")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(VoiceInputStyle.appBlue)
-                Text("— —")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    if let name = result.memberName {
+                        Text(name)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.primary)
+                    }
+                    Text(deltaText)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(deltaColor)
+                }
+                if let note = result.note {
+                    Text(note)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
         }
@@ -400,6 +481,8 @@ private struct IntentCardView: View {
 // MARK: - ErrorCardView
 
 private struct ErrorCardView: View {
+    var debugInfo: String = ""
+
     private let examples: [(tag: String, example: String)] = [
         ("加分", "给小明加10分"),
         ("扣分", "小红扣了5分"),
@@ -430,6 +513,13 @@ private struct ErrorCardView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                // DEBUG: remove before ship
+                if !debugInfo.isEmpty {
+                    Text(debugInfo)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(Color(.systemGray2))
+                        .padding(.top, 4)
+                }
             }
             Spacer()
         }
@@ -440,6 +530,6 @@ private struct ErrorCardView: View {
 }
 
 #Preview {
-    VoiceInputView()
+    VoiceInputView(familyId: 1)
         .presentationDetents([.fraction(VoiceInputStyle.sheetHeightFraction)])
 }

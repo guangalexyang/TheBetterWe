@@ -185,6 +185,22 @@ enum PointSystemService {
         try await delete(path: "/families/\(familyId)/point-system/members/\(memberId)")
     }
 
+    static func parseTranscript(familyId: Int, transcript: String) async throws -> VoiceTranscriptResult {
+        struct Body: Encodable {
+            let transcript: String
+            let familyId: Int
+        }
+        let data = try await post(
+            path: "/voice/parse",
+            body: Body(transcript: transcript, familyId: familyId),
+            expectedStatus: 200
+        )
+        guard let result = try? JSONDecoder().decode(VoiceTranscriptResult.self, from: data) else {
+            throw PointSystemError.network
+        }
+        return result
+    }
+
     static func parseVoiceCommand(familyId: Int, utterance: String) async throws -> ParsedVoiceCommand {
         struct Body: Encodable {
             let utterance: String
@@ -231,7 +247,7 @@ enum PointSystemService {
         case 404:
             if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let extracted = body["childName"] as? String {
-                pointSystemLogger.warning("child_not_found — Gemini extracted name: '\(extracted)'")
+                pointSystemLogger.warning("child_not_found — Doubao extracted name: '\(extracted)'")
             }
             throw PointSystemError.childNotFound
         case 409:

@@ -52,7 +52,7 @@ struct MainTabView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: showMenu)
         .sheet(isPresented: $showCreate) {
-            VoiceInputView()
+            VoiceInputView(familyId: membership.familyId)
                 .presentationDetents([.fraction(VoiceInputStyle.sheetHeightFraction)])
                 .presentationDragIndicator(.hidden)
         }

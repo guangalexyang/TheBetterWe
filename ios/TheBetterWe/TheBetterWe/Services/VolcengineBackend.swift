@@ -7,7 +7,7 @@ final class VolcengineBackend: NSObject, ASRBackend {
     var onFinalTranscript: ((String) -> Void)?
     var onError: ((Error) -> Void)?
 
-    var engineLabel: String { "火山" }
+    var engineLabel: String { "火山引擎" }
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var connectionTimeoutTimer: Timer?

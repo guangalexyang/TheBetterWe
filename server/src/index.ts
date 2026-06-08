@@ -7,6 +7,7 @@ import featureToggles from './routes/featureToggles';
 import auth from './routes/auth';
 import families from './routes/families';
 import pointSystem from './routes/pointSystem';
+import voiceParse from './routes/voiceParse';
 
 const app = express();
 const port = process.env.PORT ?? 3000;
@@ -21,6 +22,7 @@ app.use('/auth', auth);
 app.use('/families', families);
 app.use('/families', pointSystem);
 app.use('/config/feature-toggles', featureToggles);
+app.use('/voice', voiceParse);
 
 const server = createServer(app);
 const wss = new WebSocketServer({ noServer: true });

@@ -14,7 +14,7 @@ final class ASRService: NSObject, ObservableObject {
     @Published private(set) var confirmedTranscript: String = ""
     /// Normalized RMS 0.0…1.0 for wave bar animation.
     @Published private(set) var audioLevel: Float = 0
-    /// Short label for the active engine — "火山" or "Apple". Empty until the backend connects.
+    /// Short label for the active engine — "火山引擎" or "Apple". Empty until the backend connects.
     @Published private(set) var engineLabel: String = ""
 
     // MARK: - Callbacks (set by VoiceInputView before calling startListening)
