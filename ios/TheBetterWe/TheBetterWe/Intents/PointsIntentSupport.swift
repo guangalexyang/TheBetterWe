@@ -45,7 +45,7 @@ enum PointsIntentSupport {
         return membership
     }
 
-    /// Sends the utterance to the server, which uses Gemini to parse it.
+    /// Sends the utterance to the server for LLM-based intent parsing.
     /// Returns a ParsedVoiceCommand with signed delta, optional note, and optional date.
     static func parseVoiceCommand(utterance: String, familyId: Int) async throws -> ParsedVoiceCommand {
         do {

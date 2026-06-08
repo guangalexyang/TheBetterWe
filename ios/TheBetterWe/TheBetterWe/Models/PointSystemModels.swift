@@ -87,3 +87,20 @@ struct PSGoal: Identifiable, Decodable {
     var id: Int { goalId }
     var goalLifespan: GoalLifespan? { GoalLifespan(rawValue: lifespan) }
 }
+
+struct VoiceTranscriptResult: Decodable {
+    let confidence: String
+    let memberId: Int?
+    let memberName: String?
+    let delta: Int?
+    let note: String?
+    let date: String?
+    let _debug: String?
+
+    var isHighConfidence: Bool { confidence == "high" }
+
+    var deltaDisplay: String {
+        guard let d = delta else { return "" }
+        return d > 0 ? "+\(d)" : "\(d)"
+    }
+}

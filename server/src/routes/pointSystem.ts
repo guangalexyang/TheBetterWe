@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import pool from '../db';
-import { callGemini, parseJson } from '../services/gemini';
+import { callDoubao, parseJson } from '../services/doubao';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -319,18 +319,18 @@ Examples (available children: Noah, Emma):
 Return ONLY valid JSON. No markdown, no explanation.`;
 
   console.log(`[parse-voice-command] utterance: "${utterance.trim()}" | children: [${childrenList}]`);
-  const geminiResult = await callGemini(prompt);
-  if (geminiResult.error) {
-    console.error('[parse-voice-command] Gemini error:', geminiResult.error);
-    res.status(500).json({ error: 'gemini_error' });
+  const doubaoResult = await callDoubao(prompt);
+  if (doubaoResult.error) {
+    console.error('[parse-voice-command] Doubao error:', doubaoResult.error);
+    res.status(500).json({ error: 'doubao_error' });
     return;
   }
-  console.log(`[parse-voice-command] Gemini raw response: ${geminiResult.text}`);
+  console.log(`[parse-voice-command] Doubao raw response: ${doubaoResult.text}`);
 
-  // Parse and validate Gemini's response
+  // Parse and validate Doubao's response
   let parsed: { points: unknown; isAdd: unknown; childName: unknown; note: unknown; date: unknown };
   try {
-    parsed = parseJson(geminiResult.text!);
+    parsed = parseJson(doubaoResult.text!);
   } catch {
     res.status(400).json({ error: 'unparseable' });
     return;
