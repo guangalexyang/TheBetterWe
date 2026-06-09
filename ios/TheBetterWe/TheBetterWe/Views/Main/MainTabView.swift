@@ -53,7 +53,7 @@ struct MainTabView: View {
         .animation(.easeInOut(duration: 0.25), value: showMenu)
         .sheet(isPresented: $showCreate) {
             VoiceInputView(familyId: membership.familyId)
-                .presentationDetents([.fraction(VoiceInputStyle.sheetHeightFraction)])
+                .presentationDetents([.height(VoiceInputStyle.sheetHeight)])
                 .presentationDragIndicator(.hidden)
         }
         .toolbar(.hidden, for: .navigationBar)

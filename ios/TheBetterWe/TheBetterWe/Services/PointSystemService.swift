@@ -97,11 +97,9 @@ enum PointSystemService {
 
     static func fetchActivities(familyId: Int, memberId: Int, limit: Int = 20, offset: Int = 0) async throws -> [PSActivity] {
         let data = try await get(path: "/families/\(familyId)/point-system/members/\(memberId)/events?limit=\(limit)&offset=\(offset)")
-        print("[PointSystemService] fetchActivities raw: \(String(data: data, encoding: .utf8) ?? "<binary>")")
         do {
             return try JSONDecoder().decode([PSActivity].self, from: data)
         } catch {
-            print("[PointSystemService] fetchActivities decode error: \(error)")
             throw PointSystemError.network
         }
     }
@@ -304,13 +302,9 @@ enum PointSystemService {
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
-            print("[PointSystemService] network failure: \(error)")
             throw PointSystemError.network
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if status != expectedStatus {
-            print("[PointSystemService] HTTP \(status) for \(request.url?.path ?? "?"): \(String(data: data, encoding: .utf8) ?? "<binary>")")
-        }
         if status == 401 { throw PointSystemError.unauthorized }
         guard status == expectedStatus else { throw PointSystemError.network }
         return data

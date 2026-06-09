@@ -2,7 +2,7 @@ import SwiftUI
 
 enum VoiceInputStyle {
     // Sheet
-    static let sheetHeightFraction: CGFloat = 0.72
+    static let sheetHeight: CGFloat = 400
     static let handleWidth: CGFloat = 36
     static let handleHeight: CGFloat = 4
 
@@ -36,7 +36,7 @@ enum VoiceInputStyle {
     static let countdownRingLineWidth: CGFloat = 3
 
     // Typography
-    static let transcriptFontSize: CGFloat = 12
+    static let transcriptFontSize: CGFloat = 15
     static let statusDotSize: CGFloat = 8
 }
 

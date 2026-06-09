@@ -95,7 +95,6 @@ struct VoiceTranscriptResult: Decodable {
     let delta: Int?
     let note: String?
     let date: String?
-    let _debug: String?
 
     var isHighConfidence: Bool { confidence == "high" }
 

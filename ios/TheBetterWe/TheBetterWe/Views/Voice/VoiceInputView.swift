@@ -21,7 +21,6 @@ struct VoiceInputView: View {
     @StateObject private var asr = ASRService()
     @State private var voiceState: VoiceInputState = .bootstrapping
     @State private var parsedResult: VoiceTranscriptResult? = nil
-    @State private var parseDebugInfo: String = ""
     @State private var permissionDenied = false
     @State private var countdownProgress: CGFloat = 1.0
     @State private var countdownTimer: Timer?
@@ -175,7 +174,7 @@ struct VoiceInputView: View {
             if voiceState == .parsed, let result = parsedResult {
                 IntentCardView(result: result).padding(.top, 8)
             } else if voiceState == .parseFailed {
-                ErrorCardView(debugInfo: parseDebugInfo).padding(.top, 8)
+                ErrorCardView().padding(.top, 8)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -266,10 +265,7 @@ struct VoiceInputView: View {
             ? asr.interimTranscript
             : asr.confirmedTranscript
         guard !transcript.isEmpty else {
-            await MainActor.run {
-                parseDebugInfo = "sent: (empty)"
-                withAnimation { voiceState = .parseFailed }
-            }
+            await MainActor.run { withAnimation { voiceState = .parseFailed } }
             return
         }
         do {
@@ -277,20 +273,12 @@ struct VoiceInputView: View {
                 familyId: familyId,
                 transcript: transcript
             )
-            print("[voice] parse result: confidence=\(result.confidence) member=\(result.memberName ?? "nil") delta=\(result.delta.map(String.init) ?? "nil") debug=\(result._debug ?? "-")")
             await MainActor.run {
                 parsedResult = result
-                var info = "sent: \(transcript)\nconfidence: \(result.confidence)"
-                if let d = result._debug { info += "\n\(d)" }
-                parseDebugInfo = info
                 withAnimation { voiceState = result.isHighConfidence ? .parsed : .parseFailed }
             }
         } catch {
-            print("[voice] parseTranscript error: \(error)")
-            await MainActor.run {
-                parseDebugInfo = "sent: \(transcript)\nerror: \(error)"
-                withAnimation { voiceState = .parseFailed }
-            }
+            await MainActor.run { withAnimation { voiceState = .parseFailed } }
         }
     }
 
@@ -308,6 +296,7 @@ struct VoiceInputView: View {
                     note: result.note,
                     date: result.date ?? localDateString()
                 )
+                NotificationCenter.default.post(name: .pointEventDidChange, object: nil)
             } catch { /* errors dismissed silently — user can retry */ }
             await MainActor.run { dismiss() }
         }
@@ -481,8 +470,6 @@ private struct IntentCardView: View {
 // MARK: - ErrorCardView
 
 private struct ErrorCardView: View {
-    var debugInfo: String = ""
-
     private let examples: [(tag: String, example: String)] = [
         ("加分", "给小明加10分"),
         ("扣分", "小红扣了5分"),
@@ -513,13 +500,6 @@ private struct ErrorCardView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                // DEBUG: remove before ship
-                if !debugInfo.isEmpty {
-                    Text(debugInfo)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(Color(.systemGray2))
-                        .padding(.top, 4)
-                }
             }
             Spacer()
         }
@@ -531,5 +511,5 @@ private struct ErrorCardView: View {
 
 #Preview {
     VoiceInputView(familyId: 1)
-        .presentationDetents([.fraction(VoiceInputStyle.sheetHeightFraction)])
+        .presentationDetents([.height(VoiceInputStyle.sheetHeight)])
 }
