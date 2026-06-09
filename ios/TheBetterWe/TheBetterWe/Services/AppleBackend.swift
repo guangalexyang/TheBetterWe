@@ -26,8 +26,7 @@ final class AppleBackend: NSObject, ASRBackend {
         recognitionRequest = request
 
         recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
-            if let error { print("[ASR] Apple error: \(error)") }
-            guard let self, let result else { return }
+            guard let self, let result, error == nil else { return }
             let text = result.bestTranscription.formattedString
             Task { @MainActor in
                 if result.isFinal {

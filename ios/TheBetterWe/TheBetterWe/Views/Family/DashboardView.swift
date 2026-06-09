@@ -47,6 +47,9 @@ struct DashboardView: View {
             .scrollDisabled(scrollDisabled)
             .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
             .task { await loadChildren() }
+            .onReceive(NotificationCenter.default.publisher(for: .pointEventDidChange)) { _ in
+                Task { await loadChildren() }
+            }
             .onAppear { loadWidgetOrder() }
             .onChange(of: widgetOrder) { _, _ in
                 guard draggingModule == nil else { return }

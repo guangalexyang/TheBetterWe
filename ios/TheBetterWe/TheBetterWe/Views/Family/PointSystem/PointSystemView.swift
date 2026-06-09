@@ -96,6 +96,9 @@ struct PointSystemView: View {
         }
         .animation(.easeOut(duration: 0.22), value: showDeleteConfirm)
         .task { await loadChildren() }
+        .onReceive(NotificationCenter.default.publisher(for: .pointEventDidChange)) { _ in
+            Task { await loadChildren() }
+        }
         .onChange(of: children) { _, newValue in
             if selectedIndex >= newValue.count {
                 selectedIndex = max(0, newValue.count - 1)
