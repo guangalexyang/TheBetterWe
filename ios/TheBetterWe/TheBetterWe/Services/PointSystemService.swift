@@ -76,17 +76,19 @@ enum PointSystemService {
         memberId: Int,
         delta: Int,
         note: String?,
-        date: String? = nil
+        date: String? = nil,
+        eventType: String = "add"
     ) async throws -> PointEventResponse {
         struct Body: Encodable {
             let memberId: Int
             let delta: Int
             let note: String?
             let date: String?
+            let eventType: String
         }
         let data = try await post(
             path: "/families/\(familyId)/point-system/events",
-            body: Body(memberId: memberId, delta: delta, note: note, date: date),
+            body: Body(memberId: memberId, delta: delta, note: note, date: date, eventType: eventType),
             expectedStatus: 201
         )
         guard let response = try? JSONDecoder().decode(PointEventResponse.self, from: data) else {

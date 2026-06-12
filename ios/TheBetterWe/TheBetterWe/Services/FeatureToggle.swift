@@ -5,6 +5,9 @@ final class FeatureToggle {
 
     // Add keys here as features are gated.
     enum Key: CaseIterable {
+        case familyTodo
+        case familyNotes
+        case orderFromMe
     }
 
     private static let cacheKey = "feature_toggle_flags"

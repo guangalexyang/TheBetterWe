@@ -294,7 +294,8 @@ struct VoiceInputView: View {
                     memberId: memberId,
                     delta: delta,
                     note: result.note,
-                    date: result.date ?? localDateString()
+                    date: result.date ?? localDateString(),
+                    eventType: result.eventType ?? (delta > 0 ? "add" : "redeem")
                 )
                 NotificationCenter.default.post(name: .pointEventDidChange, object: nil)
             } catch { /* errors dismissed silently — user can retry */ }

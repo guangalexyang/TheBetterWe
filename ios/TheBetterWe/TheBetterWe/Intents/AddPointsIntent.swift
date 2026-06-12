@@ -39,7 +39,8 @@ struct AddPointsIntent: AppIntent {
             memberId: child.memberId,
             delta: amount,
             note: note,
-            date: localDateString()
+            date: localDateString(),
+            eventType: "add"
         )
 
         // 5. Success dialog

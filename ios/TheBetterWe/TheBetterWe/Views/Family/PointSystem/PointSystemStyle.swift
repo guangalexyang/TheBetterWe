@@ -63,17 +63,20 @@ enum PointSystemStyle {
 struct ActionStyle {
     let tint: Color
     let confirmLabel: LocalizedStringKey
-    let sign: Int  // +1 for add points, -1 for deduct
+    let sign: Int       // +1 for add points, -1 for deduct/redeem
+    let eventType: String
 
     static let add = ActionStyle(
         tint: PointSystemStyle.addTint,
         confirmLabel: "Add Points",
-        sign: 1
+        sign: 1,
+        eventType: "add"
     )
     static let deduct = ActionStyle(
         tint: PointSystemStyle.deductTint,
         confirmLabel: "Redeem",
-        sign: -1
+        sign: -1,
+        eventType: "redeem"
     )
 }
 

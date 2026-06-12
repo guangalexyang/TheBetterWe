@@ -13,9 +13,23 @@ enum AppModule: String, CaseIterable, Hashable {
 
     var isMandatory: Bool {
         switch self {
-        case .familyTodo, .pointSystem, .familyNotes: return true
-        case .orderFromMe: return false
+        case .pointSystem: return true
+        default:           return false
         }
+    }
+
+    var featureToggleKey: FeatureToggle.Key? {
+        switch self {
+        case .familyTodo:  return .familyTodo
+        case .familyNotes: return .familyNotes
+        case .orderFromMe: return .orderFromMe
+        case .pointSystem: return nil
+        }
+    }
+
+    var isToggleActive: Bool {
+        guard let key = featureToggleKey else { return true }
+        return FeatureToggle.isActive(key)
     }
 
     var title: LocalizedStringKey {

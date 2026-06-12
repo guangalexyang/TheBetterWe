@@ -163,7 +163,7 @@ struct DashboardView: View {
 
     private func loadWidgetOrder() {
         let active = AppModule.allCases.filter {
-            $0.isMandatory || membership.roleKeywords.contains($0.rawValue)
+            $0.isToggleActive && ($0.isMandatory || membership.roleKeywords.contains($0.rawValue))
         }
         let saved = (UserDefaults.standard.array(forKey: orderKey) as? [String] ?? [])
             .compactMap { AppModule(rawValue: $0) }
