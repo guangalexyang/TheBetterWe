@@ -14,6 +14,7 @@ function lowConfidence(debug: string) {
     delta: null,
     note: null,
     date: null,
+    eventType: null,
     _debug: debug,
   };
 }
@@ -31,7 +32,7 @@ Family children: [${childList}]
 
 Parse the following family points command into JSON with exactly these fields:
 - points: positive integer (1-9999)
-- isAdd: boolean (true = adding points, false = deducting/redeeming)
+- action: "add" | "deduct" | "redeem"  ("add" = earning points, "deduct" = penalty/correction, "redeem" = spending points on a reward)
 - memberId: integer — the "id" of the matching child. Correct ASR/phonetic errors (e.g. "Nova" → match Noah, "Amy" → match Emma).
 - note: string or null (reason/description, null if not mentioned)
 - date: "YYYY-MM-DD" or null (resolve relative references using today; null if not mentioned)
@@ -39,9 +40,10 @@ Parse the following family points command into JSON with exactly these fields:
 Command: "${transcript}"
 
 Examples (children: [{"id":${exampleId1},"name":"Noah"}, {"id":${exampleId2},"name":"Emma"}]):
-- "给 Nova 加10分" → {"points":10,"isAdd":true,"memberId":${exampleId1},"note":null,"date":null}
-- "给Emma扣5分因为没做作业" → {"points":5,"isAdd":false,"memberId":${exampleId2},"note":"没做作业","date":null}
-- "add 5 points to Noah for homework" → {"points":5,"isAdd":true,"memberId":${exampleId1},"note":"homework","date":null}
+- "给 Nova 加10分" → {"points":10,"action":"add","memberId":${exampleId1},"note":null,"date":null}
+- "给Emma扣5分因为没做作业" → {"points":5,"action":"deduct","memberId":${exampleId2},"note":"没做作业","date":null}
+- "小明兑换了20分" → {"points":20,"action":"redeem","memberId":${exampleId1},"note":null,"date":null}
+- "add 5 points to Noah for homework" → {"points":5,"action":"add","memberId":${exampleId1},"note":"homework","date":null}
 
 Return ONLY valid JSON. No markdown, no explanation.`;
 }
@@ -105,7 +107,7 @@ router.post('/parse', async (req: Request, res: Response) => {
   }
 
   let parsed: {
-    points: unknown; isAdd: unknown; memberId: unknown; note: unknown; date: unknown;
+    points: unknown; action: unknown; memberId: unknown; note: unknown; date: unknown;
   };
   try {
     parsed = parseJson(llmResult.text);
@@ -115,14 +117,15 @@ router.post('/parse', async (req: Request, res: Response) => {
     return;
   }
 
-  const { points, isAdd, memberId: memberIdRaw, note, date } = parsed;
+  const { points, action, memberId: memberIdRaw, note, date } = parsed;
+  const validActions = ['add', 'deduct', 'redeem'];
 
   if (
     typeof points !== 'number' || !Number.isInteger(points) || points < 1 || points > 9999 ||
-    typeof isAdd !== 'boolean' ||
+    typeof action !== 'string' || !validActions.includes(action) ||
     typeof memberIdRaw !== 'number' || !Number.isInteger(memberIdRaw)
   ) {
-    res.json(lowConfidence(`field_invalid:points=${JSON.stringify(points)},isAdd=${JSON.stringify(isAdd)},memberId=${JSON.stringify(memberIdRaw)}`));
+    res.json(lowConfidence(`field_invalid:points=${JSON.stringify(points)},action=${JSON.stringify(action)},memberId=${JSON.stringify(memberIdRaw)}`));
     return;
   }
 
@@ -138,7 +141,7 @@ router.post('/parse', async (req: Request, res: Response) => {
   }
 
   const safeNote = typeof note === 'string' && note.trim() ? note.trim() : null;
-  const delta = (isAdd as boolean) ? (points as number) : -(points as number);
+  const delta = (action === 'add') ? (points as number) : -(points as number);
 
   res.json({
     confidence: 'high',
@@ -147,6 +150,7 @@ router.post('/parse', async (req: Request, res: Response) => {
     delta,
     note: safeNote,
     date: safeDate,
+    eventType: action,
   });
 });
 

@@ -1148,18 +1148,16 @@ private struct ActivityRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Circle()
-                .fill(activity.isPositive ? Color.green.opacity(0.12) : Color.red.opacity(0.12))
+                .fill(activity.activityColor.opacity(0.12))
                 .frame(width: PointSystemStyle.activityIconSize, height: PointSystemStyle.activityIconSize)
                 .overlay(
-                    Image(systemName: activity.isPositive ? "star.fill" : "minus")
+                    Image(systemName: activity.activityIcon)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(activity.isPositive ? .green : .red)
+                        .foregroundStyle(activity.activityColor)
                 )
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(verbatim: activity.note ?? (activity.isPositive
-                    ? String(localized: "Points added")
-                    : String(localized: "Points redeemed")))
+                Text(verbatim: activity.note ?? activity.fallbackNote)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -1172,7 +1170,7 @@ private struct ActivityRow: View {
 
             Text(verbatim: activity.deltaText)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(activity.isPositive ? .green : .red)
+                .foregroundStyle(activity.activityColor)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

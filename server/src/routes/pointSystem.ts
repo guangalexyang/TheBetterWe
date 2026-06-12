@@ -193,11 +193,12 @@ router.delete('/:familyId/point-system/members/:memberId', async (req: Request, 
 router.post('/:familyId/point-system/events', async (req: Request, res: Response) => {
   const familyId = parseInt(req.params.familyId, 10);
   const userId = req.auth!.sub;
-  const { memberId, delta, note, date } = req.body as {
+  const { memberId, delta, note, date, eventType } = req.body as {
     memberId?: number;
     delta?: number;
     note?: string;
     date?: string;
+    eventType?: string;
   };
 
   if (!(await isMember(familyId, userId))) {
@@ -237,6 +238,11 @@ router.post('/:familyId/point-system/events', async (req: Request, res: Response
   const safeDate: string | null =
     typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 
+  const validEventTypes = ['add', 'deduct', 'redeem'];
+  const safeEventType: string = validEventTypes.includes(eventType as string)
+    ? (eventType as string)
+    : (delta > 0 ? 'add' : 'redeem');
+
   if (delta < 0) {
     const balanceResult = await pool.query(
       'SELECT COALESCE(SUM(delta), 0)::INTEGER AS balance FROM point_events WHERE member_id = $1',
@@ -250,8 +256,8 @@ router.post('/:familyId/point-system/events', async (req: Request, res: Response
   }
 
   const eventResult = await pool.query(
-    'INSERT INTO point_events (member_id, delta, note, event_date) VALUES ($1, $2, $3, COALESCE($4::DATE, CURRENT_DATE)) RETURNING id',
-    [memberId, delta, safeNote, safeDate]
+    'INSERT INTO point_events (member_id, delta, note, event_date, event_type) VALUES ($1, $2, $3, COALESCE($4::DATE, CURRENT_DATE), $5) RETURNING id',
+    [memberId, delta, safeNote, safeDate, safeEventType]
   );
   const eventId = eventResult.rows[0].id as number;
 
@@ -431,7 +437,8 @@ router.get('/:familyId/point-system/members/:memberId/events', async (req: Reque
       pe.delta,
       pe.note,
       pe.event_date  AS "eventDate",
-      pe.created_at  AS "createdAt"
+      pe.created_at  AS "createdAt",
+      pe.event_type  AS "eventType"
     FROM point_events pe
     JOIN family_members fm ON fm.id = pe.member_id
     WHERE pe.member_id = $1 AND fm.family_id = $2

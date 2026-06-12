@@ -30,11 +30,36 @@ struct PSActivity: Identifiable, Decodable {
     let note: String?
     let eventDate: String   // "YYYY-MM-DD" or ISO 8601 from server
     let createdAt: Int      // Unix epoch
+    let eventType: String   // "add" | "deduct" | "redeem"
 
     var id: Int { eventId }
 
     var deltaText: String { delta >= 0 ? "+\(delta)" : "\(delta)" }
     var isPositive: Bool { delta > 0 }
+
+    var activityIcon: String {
+        switch eventType {
+        case "redeem": return "gift.fill"
+        case "deduct": return "minus"
+        default:       return "star.fill"
+        }
+    }
+
+    var activityColor: Color {
+        switch eventType {
+        case "redeem": return .orange
+        case "deduct": return .red
+        default:       return .green
+        }
+    }
+
+    var fallbackNote: String {
+        switch eventType {
+        case "redeem": return String(localized: "Points redeemed")
+        case "deduct": return String(localized: "Points deducted")
+        default:       return String(localized: "Points added")
+        }
+    }
 
     var formattedDate: String {
         let date = Date(timeIntervalSince1970: TimeInterval(createdAt))
@@ -95,6 +120,7 @@ struct VoiceTranscriptResult: Decodable {
     let delta: Int?
     let note: String?
     let date: String?
+    let eventType: String?
 
     var isHighConfidence: Bool { confidence == "high" }
 

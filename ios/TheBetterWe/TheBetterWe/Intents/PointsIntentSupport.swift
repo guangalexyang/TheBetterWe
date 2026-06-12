@@ -93,7 +93,8 @@ enum PointsIntentSupport {
         memberId: Int,
         delta: Int,
         note: String?,
-        date: String? = nil
+        date: String? = nil,
+        eventType: String = "add"
     ) async throws -> Int {
         do {
             let response = try await PointSystemService.addPointEvent(
@@ -101,7 +102,8 @@ enum PointsIntentSupport {
                 memberId: memberId,
                 delta: delta,
                 note: note,
-                date: date
+                date: date,
+                eventType: eventType
             )
             return response.newBalance
         } catch PointSystemError.unauthorized {

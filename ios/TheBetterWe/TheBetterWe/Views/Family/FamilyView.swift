@@ -20,7 +20,9 @@ struct FamilyView: View {
     @State private var errorMessage: String? = nil
 
     private var tabs: [FamilyTab] {
-        let active = AppModule.allCases.filter { membership.roleKeywords.contains($0.rawValue) }
+        let active = AppModule.allCases.filter {
+            $0.isToggleActive && membership.roleKeywords.contains($0.rawValue)
+        }
         return [.dashboard] + active.map { .module($0) }
     }
 
