@@ -16,6 +16,4 @@ enum AuthStyle {
     static let buttonCornerRadius: CGFloat = 14
 }
 
-extension Color {
-    static let authPink = Color(red: 1.0, green: 0.71, blue: 0.76)
-}
+

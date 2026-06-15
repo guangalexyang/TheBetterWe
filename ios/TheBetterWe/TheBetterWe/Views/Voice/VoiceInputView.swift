@@ -18,6 +18,7 @@ struct VoiceInputView: View {
     let familyId: Int
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appTheme) private var theme
     @StateObject private var asr = ASRService()
     @State private var voiceState: VoiceInputState = .bootstrapping
     @State private var parsedResult: VoiceTranscriptResult? = nil
@@ -51,7 +52,7 @@ struct VoiceInputView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
+        .background(theme.cardSurface)
         .onAppear { beginListening() }
         .onDisappear { asr.stopRecording(); stopNudge() }
         .onChange(of: voiceState) { _, newState in

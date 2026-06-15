@@ -28,24 +28,21 @@ struct DashboardView: View {
                             module: module,
                             children: children,
                             onAddChild: module == .pointSystem ? { showAddChild = true } : nil,
-                            onChildTapped: module == .pointSystem ? onChildTapped : nil
+                            onChildTapped: module == .pointSystem ? onChildTapped : nil,
+                            onGripDragChanged: { drag in handleGripDragChanged(drag, for: module) },
+                            onGripDragEnded: { handleGripDragEnded(for: module) }
                         )
                         .opacity(draggingModule == module ? 0.0 : 1.0)
-                        .gesture(longPressThenDrag(for: module))
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear.preference(
-                                    key: DashboardFramePreference.self,
-                                    value: [module: geo.frame(in: .named("dashboard"))]
-                                )
-                            }
-                        )
+                        .onGeometryChange(for: CGRect.self, of: { geo in
+                            geo.frame(in: .named("dashboard"))
+                        }) { frame in
+                            cardFrames[module] = frame
+                        }
                     }
                 }
                 .padding(16)
             }
             .scrollDisabled(scrollDisabled)
-            .onPreferenceChange(DashboardFramePreference.self) { cardFrames = $0 }
             .task { await loadChildren() }
             .onReceive(NotificationCenter.default.publisher(for: .pointEventDidChange)) { _ in
                 Task { await loadChildren() }
@@ -68,7 +65,7 @@ struct DashboardView: View {
                     onChildTapped: nil
                 )
                 .frame(width: cardWidth)
-                .scaleEffect(1.05)
+                .scaleEffect(1.04)
                 .shadow(color: .black.opacity(0.2), radius: 16, y: 8)
                 .position(x: liftOrigin.midX + dragOffset.width, y: liftOrigin.midY + dragOffset.height)
                 .allowsHitTesting(false)
@@ -94,38 +91,29 @@ struct DashboardView: View {
 
     // MARK: - Gesture
 
-    private func longPressThenDrag(for module: AppModule) -> some Gesture {
-        LongPressGesture(minimumDuration: 0.4)
-            .sequenced(before: DragGesture(coordinateSpace: .named("dashboard")))
-            .onChanged { value in
-                switch value {
-                case .first(true):
-                    scrollDisabled = true
-                case .second(_, let drag?):
-                    if draggingModule == nil {
-                        liftOrigin = cardFrames[module] ?? .zero
-                        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
-                            draggingModule = module
-                        }
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    }
-                    dragOffset = drag.translation
-                    updateDropPosition(for: module)
-                default:
-                    break
-                }
+    private func handleGripDragChanged(_ drag: DragGesture.Value, for module: AppModule) {
+        if draggingModule == nil {
+            liftOrigin = cardFrames[module] ?? .zero
+            scrollDisabled = true
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                draggingModule = module
             }
-            .onEnded { _ in
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                    draggingModule = nil
-                    dragOffset = .zero
-                }
-                liftOrigin = .zero
-                lastHoverIndex = nil
-                isReordering = false
-                scrollDisabled = false
-                saveWidgetOrder()
-            }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        }
+        dragOffset = drag.translation
+        updateDropPosition(for: module)
+    }
+
+    private func handleGripDragEnded(for module: AppModule) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+            draggingModule = nil
+            dragOffset = .zero
+        }
+        liftOrigin = .zero
+        lastHoverIndex = nil
+        isReordering = false
+        scrollDisabled = false
+        saveWidgetOrder()
     }
 
     private func updateDropPosition(for module: AppModule) {
@@ -184,26 +172,50 @@ private struct WidgetCard: View {
     var children: [PSChild] = []
     var onAddChild: (() -> Void)? = nil
     var onChildTapped: ((PSChild) -> Void)? = nil
+    var onGripDragChanged: ((DragGesture.Value) -> Void)? = nil
+    var onGripDragEnded: (() -> Void)? = nil
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: module.icon)
-                    .font(.system(size: 16, weight: .semibold))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(module.iconBadgeColor)
+                        .frame(width: 28, height: 28)
+                    Image(systemName: module.icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(module.iconTintColor)
+                }
                 Text(module.title)
                     .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
                 Spacer()
+                if onGripDragChanged != nil {
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .padding(8)
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(coordinateSpace: .named("dashboard"))
+                                .onChanged { onGripDragChanged?($0) }
+                                .onEnded { _ in onGripDragEnded?() }
+                        )
+                }
             }
-            .foregroundStyle(.white)
             .padding(.horizontal, 16)
-            .frame(height: 48)
-            .background(module.widgetHeaderGradient)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
 
             cardBody
-                .background(module.widgetBodyBackground)
         }
+        .background(theme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.06), radius: 6, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(theme.cardBorder, lineWidth: 1)
+        )
     }
 
     @ViewBuilder
@@ -282,13 +294,13 @@ private struct PointSystemChildrenList: View {
                         .frame(width: 36, height: 36)
 
                         Text(verbatim: child.name)
-                            .font(.system(size: 15))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.primary)
 
                         Spacer()
 
                         Text("\(child.balance, format: .number) pts")
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(child.gender.tintColor)
 
                         Image(systemName: "chevron.right")
@@ -327,47 +339,22 @@ private struct PointSystemChildrenList: View {
 // MARK: - AppModule widget theme (view-layer only)
 
 private extension AppModule {
-    var widgetHeaderGradient: LinearGradient {
+    var iconBadgeColor: Color {
         switch self {
-        case .familyTodo:
-            return LinearGradient(
-                colors: [Color(red: 74/255,  green: 85/255,  blue: 204/255),
-                         Color(red: 123/255, green: 134/255, blue: 232/255)],
-                startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .pointSystem:
-            return LinearGradient(
-                colors: [Color(red: 58/255,  green: 123/255, blue: 213/255),
-                         Color(red: 91/255,  green: 168/255, blue: 245/255)],
-                startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .familyNotes:
-            return LinearGradient(
-                colors: [Color(red: 192/255, green: 122/255, blue: 8/255),
-                         Color(red: 232/255, green: 168/255, blue: 40/255)],
-                startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .orderFromMe:
-            return LinearGradient(
-                colors: [Color(red: 26/255,  green: 144/255, blue: 144/255),
-                         Color(red: 56/255,  green: 196/255, blue: 184/255)],
-                startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .familyTodo:  return Color(red: 74/255,  green: 85/255,  blue: 204/255).opacity(0.20)
+        case .pointSystem: return Color(red: 58/255,  green: 123/255, blue: 213/255).opacity(0.20)
+        case .familyNotes: return Color(red: 192/255, green: 122/255, blue: 8/255).opacity(0.20)
+        case .orderFromMe: return Color(red: 26/255,  green: 144/255, blue: 144/255).opacity(0.20)
         }
     }
 
-    var widgetBodyBackground: Color {
+    var iconTintColor: Color {
         switch self {
-        case .familyTodo:  return Color(red: 74/255,  green: 85/255,  blue: 204/255).opacity(0.09)
-        case .pointSystem: return Color(red: 58/255,  green: 123/255, blue: 213/255).opacity(0.09)
-        case .familyNotes: return Color(red: 192/255, green: 122/255, blue: 8/255).opacity(0.09)
-        case .orderFromMe: return Color(red: 26/255,  green: 144/255, blue: 144/255).opacity(0.09)
+        case .familyTodo:  return Color(red: 123/255, green: 134/255, blue: 232/255)
+        case .pointSystem: return Color(red: 91/255,  green: 168/255, blue: 245/255)
+        case .familyNotes: return Color(red: 232/255, green: 168/255, blue: 40/255)
+        case .orderFromMe: return Color(red: 56/255,  green: 196/255, blue: 184/255)
         }
-    }
-}
-
-// MARK: - Frame Preference Key
-
-private struct DashboardFramePreference: PreferenceKey {
-    static var defaultValue: [AppModule: CGRect] = [:]
-    static func reduce(value: inout [AppModule: CGRect], nextValue: () -> [AppModule: CGRect]) {
-        value.merge(nextValue()) { $1 }
     }
 }
 

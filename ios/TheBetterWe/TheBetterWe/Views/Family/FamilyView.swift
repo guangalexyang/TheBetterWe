@@ -18,6 +18,7 @@ struct FamilyView: View {
     @State private var showDeleteConfirm = false
     @State private var isDeleting = false
     @State private var errorMessage: String? = nil
+    @Environment(\.appTheme) private var theme
 
     private var tabs: [FamilyTab] {
         let active = AppModule.allCases.filter {
@@ -32,7 +33,9 @@ struct FamilyView: View {
                 FamilyTopBar(selectedTab: $selectedTab, tabs: tabs) {
                     withAnimation(.easeInOut(duration: 0.25)) { showDrawer = true }
                 }
-                Divider()
+                Rectangle()
+                    .fill(theme.cardBorder)
+                    .frame(height: 0.5)
                 tabContent
             }
 
@@ -125,13 +128,14 @@ private struct FamilyTopBar: View {
     @Binding var selectedTab: FamilyTab
     let tabs: [FamilyTab]
     let onMenu: () -> Void
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         HStack(spacing: 0) {
             Button(action: onMenu) {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: 20))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(theme.navIconColor)
                     .padding(.leading, 16)
                     .padding(.trailing, 8)
             }
@@ -148,7 +152,7 @@ private struct FamilyTopBar: View {
             }
         }
         .frame(height: 44)
-        .background(Color(.systemBackground))
+        .background(theme.pageBg)
     }
 }
 
@@ -156,6 +160,7 @@ private struct TabLabel: View {
     let tab: FamilyTab
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.appTheme) private var theme
 
     private var label: LocalizedStringKey {
         switch tab {
@@ -166,16 +171,13 @@ private struct TabLabel: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                Text(label)
-                    .font(.system(size: 15, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-                Capsule()
-                    .fill(isSelected ? Color.primary : Color.clear)
-                    .frame(height: 2.5)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            Text(label)
+                .font(.system(size: 14, weight: isSelected ? .bold : .regular))
+                .foregroundStyle(isSelected ? theme.tabStripActiveColor : theme.tabStripInactiveColor)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(isSelected ? theme.primaryAccent : Color.clear)
+                .clipShape(Capsule())
         }
     }
 }
@@ -187,29 +189,59 @@ private struct FamilyLeftDrawer: View {
     let onDismiss: () -> Void
     let onInvite: () -> Void
     let onEdit: () -> Void
+    @Environment(\.appTheme) private var theme
+
+    private let headerGradient = LinearGradient(
+        colors: [
+            Color(red: 240/255, green: 112/255, blue: 74/255),
+            Color(red: 232/255, green: 93/255, blue: 122/255)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Family")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-                .padding(.top, 60)
-                .padding(.bottom, 8)
+            // Gradient header
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("家庭")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text(verbatim: membership.familyName)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .padding(6)
+                        .background(.white.opacity(0.15), in: Circle())
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 56)
+            .padding(.bottom, 20)
+            .background(headerGradient)
 
+            // Content
             VStack(spacing: 0) {
                 verbatimRow(icon: "house", label: membership.familyName, action: { /* future: multi-family picker */ })
                 drawerRow(icon: "person.badge.plus", label: "Invite", action: onInvite)
                 drawerRow(icon: "pencil", label: "Edit", action: onEdit)
             }
-            .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(theme.cardBorder, lineWidth: 1))
             .padding(.horizontal, 16)
+            .padding(.top, 16)
 
             Spacer()
         }
         .frame(width: UIScreen.main.bounds.width * 0.75)
         .frame(maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
+        .background(theme.pageBg)
         .ignoresSafeArea()
     }
 

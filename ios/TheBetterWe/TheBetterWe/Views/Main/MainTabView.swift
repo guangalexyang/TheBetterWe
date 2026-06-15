@@ -12,18 +12,28 @@ struct MainTabView: View {
     @State private var selectedTab: AppTab = .family
     @State private var showCreate = false
     @State private var showMenu = false
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         NavigationStack {
         ZStack(alignment: .trailing) {
+            // Subtle warm gradient background
+            LinearGradient(
+                colors: theme.pageBgGradientColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
             Group {
                 switch selectedTab {
                 case .family: FamilyView(membership: membership, onDeleted: onFamilyDeleted, onLogOut: onLogOut)
                 case .me: MeView(
+                    membership: membership,
                     onMenuTap: { withAnimation(.easeInOut(duration: 0.25)) { showMenu = true } },
                     onLogOut: onLogOut
                 )
-            }
+                }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 CustomTabBar(selectedTab: $selectedTab, onPlus: { showCreate = true })
@@ -64,6 +74,7 @@ struct MainTabView: View {
 private struct MenuDrawer: View {
     var onDismiss: () -> Void
     var onLogOut: () -> Void
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -93,14 +104,14 @@ private struct MenuDrawer: View {
                 .foregroundStyle(.red)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
-                .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 12))
+                .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 48)
         }
         .frame(width: UIScreen.main.bounds.width * 0.82)
         .frame(maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground))
+        .background(theme.pageBg)
         .ignoresSafeArea()
     }
 }
@@ -108,11 +119,15 @@ private struct MenuDrawer: View {
 private struct CustomTabBar: View {
     @Binding var selectedTab: AppTab
     let onPlus: () -> Void
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
-            Divider()
-            HStack(spacing: 0) {
+            Rectangle()
+                .fill(theme.cardBorder)
+                .frame(height: 0.5)
+            // bottom-aligned so the taller + button floats above the tab icons
+            HStack(alignment: .bottom, spacing: 0) {
                 tabButton(icon: "house", label: "Home", tab: .family)
                 Spacer()
                 plusButton
@@ -120,9 +135,9 @@ private struct CustomTabBar: View {
                 tabButton(icon: "person", label: "Me", tab: .me)
             }
             .padding(.horizontal, 40)
-            .padding(.top, 10)
+            .padding(.top, 8)
             .padding(.bottom, 24)
-            .background(.white)
+            .background(theme.cardSurface)
         }
     }
 
@@ -130,27 +145,43 @@ private struct CustomTabBar: View {
     private func tabButton(icon: String, label: LocalizedStringKey, tab: AppTab) -> some View {
         let isSelected = selectedTab == tab
         Button { selectedTab = tab } label: {
-            VStack(spacing: 3) {
+            VStack(spacing: 2) {
                 Image(systemName: isSelected ? "\(icon).fill" : icon)
-                    .font(.system(size: 24))
-                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .font(.system(size: 22))
+                    .foregroundStyle(isSelected ? theme.tabActiveColor : theme.tabInactiveColor)
                 Text(label)
-                    .font(.system(size: 10, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .font(.system(size: 10, weight: isSelected ? .bold : .medium))
+                    .foregroundStyle(isSelected ? theme.tabActiveColor : theme.tabInactiveColor)
+                Circle()
+                    .fill(isSelected ? theme.tabActiveColor : Color.clear)
+                    .frame(width: 4, height: 4)
             }
         }
     }
 
     private var plusButton: some View {
         Button { onPlus() } label: {
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.primary, lineWidth: 1.5)
-                .frame(width: 52, height: 34)
+            RoundedRectangle(cornerRadius: 16)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 240/255, green: 112/255, blue: 74/255),
+                            Color(red: 232/255, green: 93/255, blue: 122/255)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 56, height: 56)
                 .overlay {
                     Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(Color.primary)
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
+                .shadow(
+                    color: Color(red: 240/255, green: 112/255, blue: 74/255).opacity(0.45),
+                    radius: 12, y: 4
+                )
         }
     }
 }
@@ -160,4 +191,5 @@ private struct CustomTabBar: View {
         familyId: 1, familyName: "The Yangs", memberId: 1,
         displayName: "Dad", roleKeywords: ["familyTodo", "pointSystem", "familyNotes"]
     ))
+    .environment(ThemeManager())
 }

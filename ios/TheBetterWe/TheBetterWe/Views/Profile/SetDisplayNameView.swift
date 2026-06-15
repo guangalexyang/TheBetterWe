@@ -7,6 +7,7 @@ struct SetDisplayNameView: View {
     @State private var displayName = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @Environment(\.appTheme) private var theme
 
     private var canContinue: Bool { !displayName.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -39,7 +40,8 @@ struct SetDisplayNameView: View {
             }
             .padding(.horizontal, AuthStyle.fieldHPadding)
             .padding(.vertical, AuthStyle.fieldVPadding)
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius))
+            .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius).strokeBorder(theme.cardBorder, lineWidth: 1))
             .padding(.horizontal, AuthStyle.screenHPadding)
 
             if let errorMessage {
@@ -67,7 +69,7 @@ struct SetDisplayNameView: View {
             } label: {
                 Group {
                     if isLoading {
-                        ProgressView().tint(Color(UIColor.systemBackground))
+                        ProgressView().tint(.white)
                     } else {
                         Text("Continue")
                             .font(.body.bold())
@@ -75,8 +77,8 @@ struct SetDisplayNameView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AuthStyle.buttonVPadding)
-                .background(canContinue ? Color.primary : Color.primary.opacity(0.3))
-                .foregroundStyle(Color(UIColor.systemBackground))
+                .background(canContinue ? theme.primaryAccent : theme.primaryAccent.opacity(0.3))
+                .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
             }
             .disabled(!canContinue || isLoading)
@@ -93,14 +95,27 @@ struct SetDisplayNameView: View {
             }
             .padding(.bottom, 48)
         }
+        .background(
+            LinearGradient(
+                colors: theme.pageBgGradientColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
     }
 }
 
-#Preview {
+#Preview("Dark") {
     SetDisplayNameView()
+        .environment(ThemeManager())
+        .environment(\.appTheme, AppTheme.dark)
+        .preferredColorScheme(.dark)
 }
 
-#Preview("中文") {
+#Preview("Light") {
     SetDisplayNameView()
-        .environment(\.locale, .init(identifier: "zh-Hans"))
+        .environment(ThemeManager())
+        .environment(\.appTheme, AppTheme.light)
+        .preferredColorScheme(.light)
 }

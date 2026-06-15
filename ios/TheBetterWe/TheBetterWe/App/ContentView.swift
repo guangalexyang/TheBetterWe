@@ -47,7 +47,7 @@ struct ContentView: View {
                 )
             }
         } else {
-            LoginView(onSuccess: {
+            AuthView(onSuccess: {
                 isAuthenticated = true
                 appState = AuthService.displayName == nil ? .needsDisplayName : .loading
             })
@@ -55,6 +55,7 @@ struct ContentView: View {
     }
 
     private func loadFamilies() async {
+        await FeatureToggle.shared.fetch(from: APIConfig.baseURL)
         do {
             let memberships = try await FamilyService.fetchMine()
             appState = memberships.isEmpty ? .noFamily : .hasFamily(memberships)

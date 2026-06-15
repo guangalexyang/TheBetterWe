@@ -7,6 +7,7 @@ struct ModuleSelectionView: View {
     var onComplete: ([FamilyMembership]) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appTheme) private var theme
     @State private var enabledOptionals:  Set<AppModule> = []
     @State private var expandedOptionals: Set<AppModule> = []
     @State private var isLoading = false
@@ -82,15 +83,15 @@ struct ModuleSelectionView: View {
             } label: {
                 Group {
                     if isLoading {
-                        ProgressView().tint(Color(UIColor.systemBackground))
+                        ProgressView().tint(.white)
                     } else {
                         Text("Done").font(.body.bold())
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AuthStyle.buttonVPadding)
-                .background(Color.primary)
-                .foregroundStyle(Color(UIColor.systemBackground))
+                .background(theme.primaryAccent)
+                .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
             }
             .disabled(isLoading)
@@ -98,6 +99,14 @@ struct ModuleSelectionView: View {
             .padding(.top, 16)
             .padding(.bottom, 48)
         }
+        .background(
+            LinearGradient(
+                colors: theme.pageBgGradientColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .alert("Error", isPresented: .init(
@@ -128,7 +137,8 @@ struct ModuleSelectionView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
+        .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
     }
 
     @ViewBuilder
@@ -175,7 +185,7 @@ struct ModuleSelectionView: View {
                     } label: {
                         Image(systemName: isEnabled ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 22))
-                            .foregroundStyle(isEnabled ? Color.primary : Color(.systemGray3))
+                            .foregroundStyle(isEnabled ? theme.primaryAccent : Color(.systemGray3))
                     }
                 }
             }
@@ -206,7 +216,8 @@ struct ModuleSelectionView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
+        .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
         .animation(.easeInOut(duration: 0.2), value: isExpanded)
     }
 }
@@ -215,11 +226,24 @@ struct ModuleSelectionView: View {
     NavigationStack {
         ModuleSelectionView(familyName: "The Yangs", role: .dad)
     }
+    .environment(ThemeManager())
+    .environment(\.appTheme, .dark)
+}
+
+#Preview("Light") {
+    NavigationStack {
+        ModuleSelectionView(familyName: "The Yangs", role: .dad)
+    }
+    .environment(ThemeManager())
+    .environment(\.appTheme, .light)
+    .preferredColorScheme(.light)
 }
 
 #Preview("中文") {
     NavigationStack {
         ModuleSelectionView(familyName: "杨家", role: .mom)
     }
+    .environment(ThemeManager())
+    .environment(\.appTheme, .dark)
     .environment(\.locale, .init(identifier: "zh-Hans"))
 }
