@@ -3,6 +3,8 @@ import SwiftData
 
 @main
 struct TheBetterWeApp: App {
+    @State private var themeManager = ThemeManager()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
@@ -16,11 +18,9 @@ struct TheBetterWeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .task {
-                    // Replace with real server base URL when backend is live.
-                    // guard let url = URL(string: "https://api.thebetterwe.com") else { return }
-                    // await FeatureToggle.shared.fetch(from: url)
-                }
+                .environment(themeManager)
+                .environment(\.appTheme, themeManager.current)
+                .preferredColorScheme(themeManager.current.colorScheme)
         }
         .modelContainer(sharedModelContainer)
     }

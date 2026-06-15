@@ -191,15 +191,17 @@ Build UI **view by view** — never scaffold multiple views at once without user
 
 1. **Phase 1 (current)** — iOS app + Node/Express server + PostgreSQL; user auth, family setup, Point System (kids + rules + points + redemptions + goals), personal + family TODOs/Done, Highlight of the Day
    - ✅ Backend deployed to fly.io — `https://thebetterwe-api.fly.dev`
-   - ✅ Siri App Intents — AddPointsIntent + DeductPointsIntent (Chinese + English phrases)
-   - ✅ App display name: **诺米** (`INFOPLIST_KEY_CFBundleDisplayName` in pbxproj)
+   - ✅ Siri App Intents — `AddPointsIntent` + `RedeemRewardIntent`; `RecordPointsIntent` and `TheBetterWeShortcuts` removed (superseded by in-app voice flow); re-implement when Siri AI releases
+   - ✅ App display name: **佳家** (`INFOPLIST_KEY_CFBundleDisplayName` in pbxproj)
    - ✅ Point System goals — create, lifespan (daily/weekly/monthly/one-time), period progress, fulfilled UI
    - ✅ Voice Input ASR sheet — `+` tab bar button opens 5-state bottom sheet; `AVAudioEngine` + `SFSpeechRecognizer` (zh-Hans on device); silence detection, error card, mic nudge animation
    - ✅ Volcengine ASR — full server proxy at `/asr/stream` WebSocket; `ASRBackend` protocol with `AppleBackend` + `VolcengineBackend`; status label shows `聆听中[火山]` or `聆听中[Apple]`; falls back to Apple automatically; credentials set (`APP_ID=3598972451`, resource `volc.bigasr.sauc.duration`), deployed and active
    - ✅ ASR bootstrap flow — `VoiceInputState.bootstrapping` shows spinner + "连接中" while fly.io wakes and Volcengine connects; `startListening()` does not start noSpeechTimer; `arm(noSpeechTimeout:)` called in `onChange(of: engineLabel)` once non-empty; `ASRDiagnosticView` (DEBUG, long-press status label) for in-app connection testing
-   - ✅ Child edit/delete — ▼ badge trigger in ChildCardView; AddChildView reused for edit mode (title always "宝宝信息"); server PUT + cascading DELETE routes; **server deploy pending**
+   - ✅ Child edit/delete — ▼ badge trigger in ChildCardView; AddChildView reused for edit mode (title always "宝宝信息"); server PUT + cascading DELETE routes; deployed
    - ✅ Child card action menu — custom bottom action sheet (`fullScreenCover`, split fade/slide animation); delete confirmation is custom centered card overlay (not system alert)
+   - ✅ `event_type` on `point_events` — `add`/`deduct`/`redeem`; migration 007 backfills existing rows from delta sign; voice parse LLM uses `action: "add"|"deduct"|"redeem"` field (not `isAdd: boolean`); `ActivityRow` icon/color/label driven by `eventType`
+   - ✅ Feature toggles for `familyTodo`, `familyNotes`, `orderFromMe` — tabs and dashboard cards gated by `AppModule.isToggleActive`; all three currently **off** on server (pending implementation)
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
 3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
-4. **Phase 4** — Doubao API (in-app natural language point recording)
+4. **Phase 4** — Doubao API (in-app natural language point recording) ✅ done — voice parse endpoint at `/voice/parse`
 5. **Phase 5** — Apple Watch companion

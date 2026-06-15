@@ -20,6 +20,7 @@ struct PointAdjustFormView: View {
     @State private var isMoreExpanded: Bool = false
     @State private var isSubmitting: Bool = false
     @State private var errorMessage: String? = nil
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,7 +38,7 @@ struct PointAdjustFormView: View {
                 .padding(.top, 16)
                 .padding(.bottom, PointSystemStyle.formVPadding)
         }
-        .background(Color(.systemGray6))
+        .background(theme.pageBg)
     }
 
     @ViewBuilder

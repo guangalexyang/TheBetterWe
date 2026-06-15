@@ -27,6 +27,7 @@ struct CreateFamilyView: View {
     var onComplete: ([FamilyMembership]) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appTheme) private var theme
     @State private var familyName = ""
     @State private var selectedRole: FamilyRole? = nil
     @State private var customRole = ""
@@ -76,7 +77,8 @@ struct CreateFamilyView: View {
                     }
                     .padding(.horizontal, AuthStyle.fieldHPadding)
                     .padding(.vertical, AuthStyle.fieldVPadding)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius))
+                    .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius))
+                    .overlay(RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
 
                     // Role section
                     Text("You are the family's:")
@@ -96,7 +98,8 @@ struct CreateFamilyView: View {
                             .autocorrectionDisabled()
                             .padding(.horizontal, AuthStyle.fieldHPadding)
                             .padding(.vertical, AuthStyle.fieldVPadding)
-                            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius))
+                            .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius))
+                            .overlay(RoundedRectangle(cornerRadius: AuthStyle.fieldCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
                             .padding(.top, 12)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
@@ -113,8 +116,8 @@ struct CreateFamilyView: View {
                     .font(.body.bold())
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, AuthStyle.buttonVPadding)
-                    .background(canContinue ? Color.primary : Color.primary.opacity(0.3))
-                    .foregroundStyle(Color(UIColor.systemBackground))
+                    .background(canContinue ? theme.primaryAccent : theme.primaryAccent.opacity(0.4))
+                    .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
             }
             .disabled(!canContinue)
@@ -122,6 +125,14 @@ struct CreateFamilyView: View {
             .padding(.top, 16)
             .padding(.bottom, 48)
         }
+        .background(
+            LinearGradient(
+                colors: theme.pageBgGradientColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .navigationDestination(isPresented: $navigateToModules) {
@@ -152,8 +163,9 @@ struct CreateFamilyView: View {
                 .font(.subheadline.weight(isSelected ? .semibold : .regular))
                 .padding(.horizontal, FamilyStyle.chipHPadding)
                 .padding(.vertical, FamilyStyle.chipVPadding)
-                .background(isSelected ? Color.primary : Color(.systemGray6))
-                .foregroundStyle(isSelected ? Color(UIColor.systemBackground) : Color.primary)
+                .background(isSelected ? theme.primaryAccent : theme.cardSurface)
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .overlay(RoundedRectangle(cornerRadius: FamilyStyle.chipCornerRadius).stroke(isSelected ? Color.clear : theme.cardBorder, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: FamilyStyle.chipCornerRadius))
         }
     }
@@ -161,9 +173,20 @@ struct CreateFamilyView: View {
 
 #Preview {
     NavigationStack { CreateFamilyView(displayName: "Alex") }
+        .environment(ThemeManager())
+        .environment(\.appTheme, .dark)
+}
+
+#Preview("Light") {
+    NavigationStack { CreateFamilyView(displayName: "Alex") }
+        .environment(ThemeManager())
+        .environment(\.appTheme, .light)
+        .preferredColorScheme(.light)
 }
 
 #Preview("中文") {
     NavigationStack { CreateFamilyView(displayName: "Alex") }
+        .environment(ThemeManager())
+        .environment(\.appTheme, .dark)
         .environment(\.locale, .init(identifier: "zh-Hans"))
 }

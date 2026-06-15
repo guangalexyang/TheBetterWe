@@ -15,6 +15,7 @@ struct PointSystemView: View {
     @State private var childToEdit: PSChild? = nil
     @State private var childToDelete: PSChild? = nil
     @State private var showDeleteConfirm = false
+    @Environment(\.appTheme) private var theme
 
     private var safeIndex: Int { min(selectedIndex, max(0, children.count - 1)) }
     private var selectedChild: PSChild? { children.isEmpty ? nil : children[safeIndex] }
@@ -68,7 +69,7 @@ struct PointSystemView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 32)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(theme.pageBg)
         .navigationDestination(isPresented: $navigateToAddChild) {
             AddChildView(familyId: membership.familyId) { newChild in
                 children.append(newChild)
@@ -146,7 +147,7 @@ struct PointSystemView: View {
             }
         }
         .padding(24)
-        .background(Color(.systemBackground))
+        .background(theme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .shadow(color: .black.opacity(0.12), radius: 24, y: 8)
         .frame(maxWidth: 320)
@@ -302,6 +303,7 @@ private struct ChildCardView: View {
     @State private var activeSheet: Sheet? = nil
     @State private var showChildMenu = false
     @State private var menuVisible = false
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         VStack(spacing: 16) {
@@ -400,11 +402,11 @@ private struct ChildCardView: View {
             }
         }
         .padding(PointSystemStyle.childCardPadding)
-        .background(Color(.systemBackground))
+        .background(theme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: PointSystemStyle.childCardCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: PointSystemStyle.childCardCornerRadius)
-                .strokeBorder(Color(.systemGray4), lineWidth: PointSystemStyle.childCardBorderWidth)
+                .strokeBorder(theme.cardBorder, lineWidth: PointSystemStyle.childCardBorderWidth)
         )
         .sheet(item: $activeSheet) { sheet in
             PointAdjustFormView(
@@ -488,7 +490,7 @@ private struct ChildCardView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .background(Color(.systemBackground))
+                .background(theme.cardSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
 
                 Button { dismissMenu() } label: {
@@ -497,7 +499,7 @@ private struct ChildCardView: View {
                         .foregroundStyle(Color.accentColor)
                         .frame(maxWidth: .infinity)
                         .frame(height: 57)
-                        .background(Color(.systemBackground))
+                        .background(theme.cardSurface)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
@@ -621,8 +623,20 @@ private struct GoalRow: View {
     let onDelete: () -> Void
 
     @State private var cardScale: CGFloat = 1.0
+    @Environment(\.appTheme) private var theme
 
     private var isFulfilled: Bool { goal.periodProgress >= goal.targetPoints && goal.targetPoints > 0 }
+
+    private static let fulfilledBg = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 12/255,  green: 42/255,  blue: 22/255,  alpha: 1)
+            : UIColor(red: 240/255, green: 253/255, blue: 244/255, alpha: 1)
+    })
+    private static let fulfilledBorder = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 30/255,  green: 70/255,  blue: 45/255,  alpha: 1)
+            : UIColor(red: 187/255, green: 247/255, blue: 208/255, alpha: 1)
+    })
 
     private var progress: Double {
         guard goal.targetPoints > 0 else { return 0 }
@@ -697,11 +711,11 @@ private struct GoalRow: View {
             .frame(height: PointSystemStyle.goalProgressHeight)
         }
         .padding(16)
-        .background(isFulfilled ? Color(red: 240/255, green: 253/255, blue: 244/255) : Color(.systemBackground))
+        .background(isFulfilled ? Self.fulfilledBg : theme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(isFulfilled ? Color(red: 187/255, green: 247/255, blue: 208/255) : Color(.systemGray4), lineWidth: isFulfilled ? 1.5 : 1)
+                .strokeBorder(isFulfilled ? Self.fulfilledBorder : theme.cardBorder, lineWidth: isFulfilled ? 1.5 : 1)
         )
         .scaleEffect(cardScale)
         .onAppear {
@@ -743,6 +757,7 @@ private struct CreateGoalSheet: View {
     @State private var endTime = Date()
     @State private var isCreating = false
     @State private var errorMessage: String? = nil
+    @Environment(\.appTheme) private var theme
 
     private var targetPoints: Int? { Int(targetText).flatMap { $0 > 0 ? $0 : nil } }
     private var canSave: Bool {
@@ -752,10 +767,22 @@ private struct CreateGoalSheet: View {
         && (selectedLifespan != .oneTime || endDate > startDate)
     }
 
-    private static let cr: CGFloat        = PointSystemStyle.formConfirmCornerRadius
-    private static let fieldBg            = Color(red: 245/255, green: 242/255, blue: 254/255)
-    private static let borderColor        = Color(red: 199/255, green: 196/255, blue: 215/255)
-    private static let labelColor         = Color(red: 118/255, green: 117/255, blue: 134/255)
+    private static let cr: CGFloat = PointSystemStyle.formConfirmCornerRadius
+    private static let fieldBg = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 46/255, green: 32/255, blue: 28/255, alpha: 1)
+            : UIColor(red: 245/255, green: 242/255, blue: 254/255, alpha: 1)
+    })
+    private static let borderColor = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.12)
+            : UIColor(red: 199/255, green: 196/255, blue: 215/255, alpha: 1)
+    })
+    private static let labelColor = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 180/255, green: 155/255, blue: 145/255, alpha: 1)
+            : UIColor(red: 118/255, green: 117/255, blue: 134/255, alpha: 1)
+    })
 
     var body: some View {
         VStack(spacing: 0) {
@@ -778,7 +805,7 @@ private struct CreateGoalSheet: View {
             sheetFooter
         }
         .frame(maxWidth: .infinity)
-        .background(Color(.systemBackground))
+        .background(theme.cardSurface)
         .onChange(of: selectedLifespan) { _, lifespan in
             withAnimation(.easeInOut(duration: 0.3)) {
                 detent = lifespan == .oneTime ? .height(730) : .height(510)
@@ -948,7 +975,7 @@ private struct CreateGoalSheet: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.systemBackground))
+        .background(theme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: Self.cr))
         .overlay(RoundedRectangle(cornerRadius: Self.cr).stroke(Self.borderColor, lineWidth: 1))
     }
@@ -985,7 +1012,7 @@ private struct CreateGoalSheet: View {
             }
             .padding(20)
         }
-        .background(Color(.systemBackground))
+        .background(theme.cardSurface)
     }
 
     // MARK: Save
@@ -1037,6 +1064,7 @@ private struct ActivitySection: View {
     @State private var hasMore = false
     @State private var loadError: String? = nil
     private let pageSize = 5
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1068,9 +1096,9 @@ private struct ActivitySection: View {
                         }
                     }
                 }
-                .background(Color(.systemBackground))
+                .background(theme.cardSurface)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color(.systemGray4), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(theme.cardBorder, lineWidth: 1))
 
                 if hasMore {
                     Button {
@@ -1189,6 +1217,7 @@ private struct ActivityRow: View {
 private struct ChildTabBar: View {
     let children: [PSChild]
     @Binding var selectedIndex: Int
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         // ViewThatFits: centered HStack when tabs fit, scrollable when they don't
@@ -1204,7 +1233,7 @@ private struct ChildTabBar: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(Color(.systemBackground))
+        .background(theme.cardSurface)
     }
 
     @ViewBuilder
@@ -1234,7 +1263,7 @@ private struct ChildTabBar: View {
                             )
                         )
                     } else {
-                        Capsule().fill(Color(.systemGray6))
+                        Capsule().fill(theme.cardSurface)
                     }
                 }
                 .foregroundStyle(index == selectedIndex ? .white : Color(.label))
@@ -1251,6 +1280,7 @@ private struct ChildFullView: View {
     let familyId: Int
     let onBalanceChange: (Int) -> Void
     let onLogOut: () -> Void
+    @Environment(\.appTheme) private var theme
 
     private enum ExpandedRow: Equatable { case add, deduct }
 
@@ -1261,11 +1291,11 @@ private struct ChildFullView: View {
         ScrollView {
             VStack(spacing: 0) {
                 childCard
-                Color(.systemGray6).frame(height: PointSystemStyle.actionListGap)
+                theme.pageBg.frame(height: PointSystemStyle.actionListGap)
                 actionList
             }
         }
-        .background(Color(.systemBackground))
+        .background(theme.pageBg)
         .navigationDestination(isPresented: $navigateToRecord) {
             PointRecordView(child: child)
         }

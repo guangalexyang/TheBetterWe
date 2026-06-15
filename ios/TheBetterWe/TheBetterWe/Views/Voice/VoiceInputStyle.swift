@@ -11,14 +11,23 @@ enum VoiceInputStyle {
     static let appBlueLight = Color(red: 144/255, green: 186/255, blue: 240/255)
     static let timerOrange = Color(red: 1.0, green: 149/255, blue: 0)
     static let interimGray = Color(hex: "AEAEB2")
-    static let confirmedColor = Color(hex: "1C1C1E")
+    // Adapts to dark mode — was hardcoded near-black, invisible in dark
+    static let confirmedColor = Color.primary
 
-    // Intent card
-    static let intentCardBackground = Color(red: 240/255, green: 245/255, blue: 1.0)
+    // Intent card — light blue in light mode, dark blue in dark mode
+    static let intentCardBackground = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 30/255, green: 50/255, blue: 80/255, alpha: 1)
+            : UIColor(red: 240/255, green: 245/255, blue: 1.0, alpha: 1)
+    })
     static let intentCardBorder = appBlue
 
-    // Error card
-    static let errorCardBackground = Color(red: 1.0, green: 245/255, blue: 245/255)
+    // Error card — light pink in light mode, dark red in dark mode
+    static let errorCardBackground = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 70/255, green: 20/255, blue: 20/255, alpha: 1)
+            : UIColor(red: 1.0, green: 245/255, blue: 245/255, alpha: 1)
+    })
     static let errorCardBorder = Color(red: 1.0, green: 59/255, blue: 48/255)
 
     // Mic button

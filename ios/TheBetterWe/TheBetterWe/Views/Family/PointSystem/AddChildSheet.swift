@@ -13,6 +13,7 @@ struct AddChildView: View {
     @State private var name = ""
     @State private var isLoading = false
     @State private var errorMessage: String? = nil
+    @Environment(\.appTheme) private var theme
 
     private var isEditMode: Bool { existingChild != nil }
 
@@ -86,7 +87,8 @@ struct AddChildView: View {
                         }
                         .padding(.horizontal, FamilyStyle.fieldHPadding)
                         .padding(.vertical, FamilyStyle.fieldVPadding)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
+                        .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
+                        .overlay(RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
 
@@ -103,8 +105,8 @@ struct AddChildView: View {
                                     .font(.subheadline.bold())
                                     .padding(.horizontal, 20)
                                     .padding(.vertical, 8)
-                                    .background(Color.primary)
-                                    .foregroundStyle(Color(UIColor.systemBackground))
+                                    .background(theme.primaryAccent)
+                                    .foregroundStyle(.white)
                                     .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)
@@ -124,7 +126,8 @@ struct AddChildView: View {
                         .autocorrectionDisabled()
                         .padding(.horizontal, FamilyStyle.fieldHPadding)
                         .padding(.vertical, FamilyStyle.fieldVPadding)
-                        .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
+                        .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
+                        .overlay(RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
                 }
                 .animation(.easeInOut(duration: 0.2), value: showDatePicker)
                 .padding(.horizontal, AuthStyle.screenHPadding)
@@ -145,7 +148,7 @@ struct AddChildView: View {
                     } label: {
                         Group {
                             if isLoading {
-                                ProgressView().tint(Color(UIColor.systemBackground))
+                                ProgressView().tint(.white)
                             } else {
                                 Text(isEditMode ? "Save Changes" : "Add Child")
                                     .font(.body.bold())
@@ -153,8 +156,8 @@ struct AddChildView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, AuthStyle.buttonVPadding)
-                        .background(trimmed.isEmpty || isLoading ? Color.primary.opacity(0.3) : Color.primary)
-                        .foregroundStyle(Color(UIColor.systemBackground))
+                        .background(trimmed.isEmpty || isLoading ? theme.primaryAccent.opacity(0.4) : theme.primaryAccent)
+                        .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
                     }
                     .disabled(trimmed.isEmpty || isLoading)
@@ -162,9 +165,17 @@ struct AddChildView: View {
                 }
                 .padding(.top, 16)
                 .padding(.bottom, 32)
-                .background(Color(.systemBackground))
+                .background(theme.cardSurface)
             }
         }
+        .background(
+            LinearGradient(
+                colors: theme.pageBgGradientColors,
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
@@ -217,6 +228,7 @@ private struct GenderCircle: View {
     let gender: ChildGender
     let selected: Bool
     let onTap: () -> Void
+    @Environment(\.appTheme) private var theme
 
     private var label: LocalizedStringKey {
         gender == .boy ? "Boy" : "Girl"
@@ -231,12 +243,10 @@ private struct GenderCircle: View {
             VStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .fill(Color(.systemGray6))
+                        .fill(theme.cardSurface)
                         .frame(width: 120, height: 120)
-                        .overlay(
-                            Circle()
-                                .stroke(selected ? ringColor : Color.clear, lineWidth: 3)
-                        )
+                        .overlay(Circle().stroke(theme.cardBorder, lineWidth: 1))
+                        .overlay(Circle().stroke(selected ? ringColor : Color.clear, lineWidth: 3))
                     Text(gender.avatarEmoji)
                         .font(.system(size: 52))
                 }

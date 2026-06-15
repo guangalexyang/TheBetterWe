@@ -5,6 +5,7 @@ struct NoFamilyView: View {
     var onComplete: ([FamilyMembership]) -> Void = { _ in }
 
     @State private var navigateToCreate = false
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         NavigationStack {
@@ -47,8 +48,8 @@ struct NoFamilyView: View {
                             .font(.body.bold())
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, FamilyStyle.buttonVPadding)
-                            .background(Color.primary)
-                            .foregroundStyle(Color(UIColor.systemBackground))
+                            .background(theme.primaryAccent)
+                            .foregroundStyle(.white)
                             .clipShape(RoundedRectangle(cornerRadius: FamilyStyle.buttonCornerRadius))
                     }
 
@@ -59,10 +60,12 @@ struct NoFamilyView: View {
                             .font(.body.bold())
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, FamilyStyle.buttonVPadding)
-                            .background(Color(.systemGray6))
+                            .background(theme.cardSurface)
                             .foregroundStyle(.primary)
+                            .overlay(RoundedRectangle(cornerRadius: FamilyStyle.buttonCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
                             .clipShape(RoundedRectangle(cornerRadius: FamilyStyle.buttonCornerRadius))
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, FamilyStyle.screenHPadding)
                 .padding(.bottom, 48)
@@ -71,15 +74,34 @@ struct NoFamilyView: View {
                 CreateFamilyView(displayName: displayName, onComplete: onComplete)
             }
             .toolbar(.hidden, for: .navigationBar)
+            .background(
+                LinearGradient(
+                    colors: theme.pageBgGradientColors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+            )
         }
     }
 }
 
 #Preview {
     NoFamilyView(displayName: "Alex")
+        .environment(ThemeManager())
+        .environment(\.appTheme, .dark)
+}
+
+#Preview("Light") {
+    NoFamilyView(displayName: "Alex")
+        .environment(ThemeManager())
+        .environment(\.appTheme, .light)
+        .preferredColorScheme(.light)
 }
 
 #Preview("中文") {
     NoFamilyView(displayName: "Alex")
+        .environment(ThemeManager())
+        .environment(\.appTheme, .dark)
         .environment(\.locale, .init(identifier: "zh-Hans"))
 }
