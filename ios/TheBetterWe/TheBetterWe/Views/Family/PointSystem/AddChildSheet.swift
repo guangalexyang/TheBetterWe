@@ -6,167 +6,62 @@ struct AddChildView: View {
     let onSave: (PSChild) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedGender: ChildGender? = nil
-    @State private var birthday: Date = Date()
-    @State private var hasBirthday = false
-    @State private var showDatePicker = false
+    @Environment(\.appTheme) private var theme
     @State private var name = ""
+    @State private var selectedGender: ChildGender? = nil
+    @State private var birthday = Date()
+    @State private var hasBirthday = false
     @State private var isLoading = false
     @State private var errorMessage: String? = nil
-    @Environment(\.appTheme) private var theme
 
     private var isEditMode: Bool { existingChild != nil }
-
     private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
+    private var canSubmit: Bool { !trimmed.isEmpty && !isLoading }
 
-    private var birthdayText: String {
-        hasBirthday
-            ? birthday.formatted(date: .long, time: .omitted)
-            : String(localized: "Select birthday")
-    }
-
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withFullDate]
+    private static let isoFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
         return f
     }()
 
+    private static let cr: CGFloat = PointSystemStyle.formConfirmCornerRadius
+
+    private static let fieldBg = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 46/255, green: 32/255, blue: 28/255, alpha: 1)
+            : UIColor(red: 245/255, green: 242/255, blue: 254/255, alpha: 1)
+    })
+
+    private static let borderColor = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.12)
+            : UIColor(red: 199/255, green: 196/255, blue: 215/255, alpha: 1)
+    })
+
+    private static let labelColor = Color(UIColor { t in
+        t.userInterfaceStyle == .dark
+            ? UIColor(red: 180/255, green: 155/255, blue: 145/255, alpha: 1)
+            : UIColor(red: 118/255, green: 117/255, blue: 134/255, alpha: 1)
+    })
+
     var body: some View {
         VStack(spacing: 0) {
-            // Top bar
-            ZStack {
-                HStack {
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.body.bold())
-                            .foregroundStyle(.primary)
-                    }
-                    Spacer()
-                }
-                Text("Child Info")
-                    .font(.title.bold())
-            }
-            .padding(.horizontal, AuthStyle.screenHPadding)
-            .frame(height: AuthStyle.topRowHeight)
-
+            topBar
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    // Gender circles
-                    HStack(spacing: 40) {
-                        GenderCircle(gender: .boy, selected: selectedGender == .boy) {
-                            withAnimation(.easeInOut(duration: 0.15)) { selectedGender = .boy }
-                        }
-                        GenderCircle(gender: .girl, selected: selectedGender == .girl) {
-                            withAnimation(.easeInOut(duration: 0.15)) { selectedGender = .girl }
-                        }
+                VStack(spacing: 20) {
+                    avatarSection
+                    formCard
+                    if !isEditMode {
+                        rewardProfileTip
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 36)
-                    .padding(.bottom, 44)
-
-                    // Birthday
-                    Text("Birthday")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.bottom, 8)
-
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showDatePicker.toggle()
-                            if showDatePicker { hasBirthday = true }
-                        }
-                    } label: {
-                        HStack {
-                            Text(birthdayText)
-                                .foregroundStyle(hasBirthday ? .primary : .secondary)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .rotationEffect(.degrees(showDatePicker ? 90 : 0))
-                        }
-                        .padding(.horizontal, FamilyStyle.fieldHPadding)
-                        .padding(.vertical, FamilyStyle.fieldVPadding)
-                        .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
-                        .overlay(RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-
-                    if showDatePicker {
-                        DatePicker("", selection: $birthday, displayedComponents: .date)
-                            .datePickerStyle(.graphical)
-                            .padding(.top, 4)
-                        HStack {
-                            Spacer()
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) { showDatePicker = false }
-                            } label: {
-                                Text("Confirm")
-                                    .font(.subheadline.bold())
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 8)
-                                    .background(theme.primaryAccent)
-                                    .foregroundStyle(.white)
-                                    .clipShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.bottom, 8)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    // Nickname
-                    Text("Nickname")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, AuthStyle.sectionSpacing)
-                        .padding(.bottom, 8)
-
-                    TextField("Enter nickname", text: $name)
-                        .autocorrectionDisabled()
-                        .padding(.horizontal, FamilyStyle.fieldHPadding)
-                        .padding(.vertical, FamilyStyle.fieldVPadding)
-                        .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius))
-                        .overlay(RoundedRectangle(cornerRadius: FamilyStyle.fieldCornerRadius).stroke(theme.cardBorder, lineWidth: 1))
                 }
-                .animation(.easeInOut(duration: 0.2), value: showDatePicker)
-                .padding(.horizontal, AuthStyle.screenHPadding)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
                 .padding(.bottom, 24)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 8) {
-                    if let msg = errorMessage {
-                        Text(msg)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, AuthStyle.screenHPadding)
-                    }
-
-                    Button {
-                        submitChild()
-                    } label: {
-                        Group {
-                            if isLoading {
-                                ProgressView().tint(.white)
-                            } else {
-                                Text(isEditMode ? "Save Changes" : "Add Child")
-                                    .font(.body.bold())
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, AuthStyle.buttonVPadding)
-                        .background(trimmed.isEmpty || isLoading ? theme.primaryAccent.opacity(0.4) : theme.primaryAccent)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: AuthStyle.buttonCornerRadius))
-                    }
-                    .disabled(trimmed.isEmpty || isLoading)
-                    .padding(.horizontal, AuthStyle.screenHPadding)
-                }
-                .padding(.top, 16)
-                .padding(.bottom, 32)
-                .background(theme.cardSurface)
-            }
+            .scrollBounceBehavior(.basedOnSize)
+            .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
         }
         .background(
             LinearGradient(
@@ -179,19 +74,286 @@ struct AddChildView: View {
         .navigationBarBackButtonHidden()
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
-        .onAppear {
-            guard let child = existingChild else { return }
-            name = child.name
-            selectedGender = child.gender
-            if let bday = child.birthday,
-               let date = Self.isoFormatter.date(from: bday) {
-                birthday = date
-                hasBirthday = true
+        .onAppear { populateForEdit() }
+    }
+
+    // MARK: - Top bar
+
+    private var topBar: some View {
+        ZStack {
+            HStack {
+                Button { dismiss() } label: {
+                    Text("Cancel")
+                        .font(.body)
+                        .foregroundStyle(Color.accentColor)
+                }
+                Spacer()
+            }
+            Text(isEditMode ? LocalizedStringKey("Child Info") : LocalizedStringKey("Add Child"))
+                .font(.headline.bold())
+                .foregroundStyle(.primary)
+        }
+        .padding(.horizontal, 20)
+        .frame(height: 52)
+    }
+
+    // MARK: - Avatar
+
+    private var avatarSection: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: selectedGender.gradientColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 100, height: 100)
+                .overlay(
+                    Text(selectedGender.avatarEmoji)
+                        .font(.system(size: 46))
+                )
+            Circle()
+                .fill(theme.cardSurface)
+                .frame(width: 30, height: 30)
+                .overlay(
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                )
+                .overlay(Circle().stroke(theme.cardBorder, lineWidth: 1))
+        }
+        .padding(.top, 12)
+    }
+
+    // MARK: - Form card
+
+    private var formCard: some View {
+        VStack(spacing: 20) {
+            nameField
+            birthdayField
+            genderSection
+        }
+        .padding(20)
+        .background(theme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(theme.cardBorder, lineWidth: 1))
+    }
+
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            fieldLabel("Child Name")
+            HStack(spacing: 10) {
+                Image(systemName: "person")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Self.labelColor)
+                TextField("Enter name", text: $name)
+                    .autocorrectionDisabled()
+                    .font(.body)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .background(Self.fieldBg)
+            .clipShape(RoundedRectangle(cornerRadius: Self.cr))
+            .overlay(RoundedRectangle(cornerRadius: Self.cr).stroke(Self.borderColor, lineWidth: 1))
+        }
+    }
+
+    private var birthdayField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            fieldLabel("Birthday")
+            HStack(spacing: 10) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Self.labelColor)
+                if hasBirthday {
+                    DatePicker("", selection: $birthday, displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                        .tint(Color.accentColor)
+                        .fixedSize()
+                    Spacer()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { hasBirthday = false }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color(.systemGray3))
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { hasBirthday = true }
+                    } label: {
+                        Text("Select birthday")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    Spacer()
+                }
+            }
+            .frame(height: 44)
+            .padding(.horizontal, 14)
+            .background(Self.fieldBg)
+            .clipShape(RoundedRectangle(cornerRadius: Self.cr))
+            .overlay(RoundedRectangle(cornerRadius: Self.cr).stroke(Self.borderColor, lineWidth: 1))
+        }
+    }
+
+    private var genderSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            fieldLabel("Gender")
+            HStack(spacing: 12) {
+                genderCard(.boy)
+                genderCard(.girl)
             }
         }
     }
 
+    private func genderCard(_ gender: ChildGender) -> some View {
+        let isSelected = selectedGender == gender
+        return Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                selectedGender = isSelected ? nil : gender
+            }
+        } label: {
+            VStack(spacing: 8) {
+                Text(gender.avatarEmoji)
+                    .font(.system(size: 30))
+                Text(gender == .boy ? LocalizedStringKey("Boy") : LocalizedStringKey("Girl"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isSelected ? .white : Self.labelColor)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: Self.cr)
+                        .fill(LinearGradient(
+                            colors: gender.gradientColors,
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                } else {
+                    RoundedRectangle(cornerRadius: Self.cr)
+                        .fill(Self.fieldBg)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Self.cr)
+                                .stroke(Self.borderColor, lineWidth: 1)
+                        )
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Reward profile tip
+
+    private var rewardProfileTip: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(selectedGender.gradientColors[0].opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "star.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(selectedGender.gradientColors[0])
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Reward Profile")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text("A new reward profile will be automatically generated for them.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(theme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(theme.cardBorder, lineWidth: 1))
+    }
+
+    // MARK: - Bottom bar
+
+    private var bottomBar: some View {
+        VStack(spacing: 8) {
+            if let msg = errorMessage {
+                Text(msg)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+            }
+            Button { submitChild() } label: {
+                Group {
+                    if isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(isEditMode ? LocalizedStringKey("Save Changes") : LocalizedStringKey("Create Child"))
+                            .font(.body.bold())
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .background {
+                    if canSubmit {
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [
+                                    Color(red: 0, green: 148/255, blue: 253/255),
+                                    Color(red: 255/255, green: 115/255, blue: 155/255)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                    } else {
+                        Capsule().fill(Color(.systemGray4))
+                    }
+                }
+                .shadow(
+                    color: canSubmit
+                        ? Color(red: 0, green: 148/255, blue: 253/255).opacity(0.3)
+                        : .clear,
+                    radius: 10, y: 4
+                )
+                .foregroundStyle(.white)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSubmit)
+            .padding(.horizontal, 20)
+        }
+        .padding(.top, 12)
+        .padding(.bottom, 32)
+        .background(theme.cardSurface)
+    }
+
+    // MARK: - Helpers
+
+    private func fieldLabel(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(Self.labelColor)
+            .kerning(0.5)
+            .textCase(.uppercase)
+    }
+
+    private func populateForEdit() {
+        guard let child = existingChild else { return }
+        name = child.name
+        selectedGender = child.gender
+        if let bday = child.birthday, let date = Self.isoFormatter.date(from: bday) {
+            birthday = date
+            hasBirthday = true
+        }
+    }
+
     private func submitChild() {
+        guard canSubmit else { return }
         isLoading = true
         errorMessage = nil
         let birthdayStr = hasBirthday ? Self.isoFormatter.string(from: birthday) : nil
@@ -224,46 +386,13 @@ struct AddChildView: View {
     }
 }
 
-private struct GenderCircle: View {
-    let gender: ChildGender
-    let selected: Bool
-    let onTap: () -> Void
-    @Environment(\.appTheme) private var theme
-
-    private var label: LocalizedStringKey {
-        gender == .boy ? "Boy" : "Girl"
-    }
-
-    private var ringColor: Color {
-        gender == .boy ? .blue : .pink
-    }
-
-    var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(theme.cardSurface)
-                        .frame(width: 120, height: 120)
-                        .overlay(Circle().stroke(theme.cardBorder, lineWidth: 1))
-                        .overlay(Circle().stroke(selected ? ringColor : Color.clear, lineWidth: 3))
-                    Text(gender.avatarEmoji)
-                        .font(.system(size: 52))
-                }
-                Text(label)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 #Preview {
     NavigationStack { AddChildView(familyId: 1) { _ in } }
+        .environment(ThemeManager())
 }
 
 #Preview("中文") {
     NavigationStack { AddChildView(familyId: 1) { _ in } }
+        .environment(ThemeManager())
         .environment(\.locale, .init(identifier: "zh-Hans"))
 }
