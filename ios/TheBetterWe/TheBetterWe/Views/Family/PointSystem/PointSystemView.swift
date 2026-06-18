@@ -623,7 +623,10 @@ private struct GoalRow: View {
     let onDelete: () -> Void
 
     @State private var cardScale: CGFloat = 1.0
+    @State private var swipeOffset: CGFloat = 0
     @Environment(\.appTheme) private var theme
+
+    private let deleteRevealWidth: CGFloat = 76
 
     private var isFulfilled: Bool { goal.periodProgress >= goal.targetPoints && goal.targetPoints > 0 }
 
@@ -662,7 +665,7 @@ private struct GoalRow: View {
         }
     }
 
-    var body: some View {
+    private var cardBody: some View {
         VStack(spacing: 10) {
             HStack {
                 Text(verbatim: goal.name)
@@ -730,11 +733,53 @@ private struct GoalRow: View {
                 }
             }
         }
-        .contextMenu {
-            Button(role: .destructive, action: onDelete) {
-                Label("Delete", systemImage: "trash")
+    }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { swipeOffset = 0 }
+                onDelete()
+            } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16, weight: .medium))
+                    Text("Delete")
+                        .font(.caption.weight(.medium))
+                }
+                .foregroundStyle(.white)
+                .frame(width: deleteRevealWidth)
+                .frame(maxHeight: .infinity)
+                .background(Color.red)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
             }
+            .buttonStyle(.plain)
+
+            cardBody
+                .offset(x: swipeOffset)
+                .gesture(
+                    DragGesture(minimumDistance: 10, coordinateSpace: .local)
+                        .onChanged { value in
+                            let dx = value.translation.width
+                            if dx < 0 {
+                                swipeOffset = max(dx, -deleteRevealWidth)
+                            } else if swipeOffset < 0 {
+                                swipeOffset = min(0, swipeOffset + dx)
+                            }
+                        }
+                        .onEnded { value in
+                            let velocity = value.predictedEndTranslation.width
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                if swipeOffset < -(deleteRevealWidth / 2) || velocity < -100 {
+                                    swipeOffset = -deleteRevealWidth
+                                } else {
+                                    swipeOffset = 0
+                                }
+                            }
+                        }
+                )
         }
+        .clipped()
     }
 }
 
