@@ -4,12 +4,12 @@ import AVFoundation
 // MARK: - State machine
 
 enum VoiceInputState {
-    case bootstrapping    // connecting to ASR backend
-    case listening        // waiting for speech, 3s countdown ring
-    case talking          // audio above threshold
-    case parsing          // silence detected, LLM call in flight
-    case parsed           // LLM returned high confidence — show IntentCard
-    case parseFailed      // LLM returned low confidence or failed — show ErrorCard
+    case bootstrapping
+    case listening
+    case talking
+    case parsing
+    case parsed
+    case parseFailed
 }
 
 // MARK: - VoiceInputView
@@ -25,47 +25,38 @@ struct VoiceInputView: View {
     @State private var permissionDenied = false
     @State private var countdownProgress: CGFloat = 1.0
     @State private var countdownTimer: Timer?
-    @State private var micRotation: Double = 0
-    @State private var nudgeTimer: Timer?
+
+    // MARK: - Dynamic sheet height
+
+    private var detentHeight: CGFloat {
+        switch voiceState {
+        case .bootstrapping: return VoiceInputStyle.heightConnecting
+        case .listening:     return VoiceInputStyle.heightIdle
+        case .talking:       return VoiceInputStyle.heightRecording
+        case .parsing:       return VoiceInputStyle.heightProcessing
+        case .parsed:        return VoiceInputStyle.heightResult
+        case .parseFailed:   return VoiceInputStyle.heightError
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             dragHandle
             headerRow
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-            transcriptArea
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
-            Spacer()
-            if voiceState == .bootstrapping {
-                bootstrapSpinner
-                    .padding(.bottom, 48)
-                    .transition(.opacity)
-            } else {
-                WaveBarsView(audioLevel: asr.audioLevel, isActive: voiceState == .talking,
-                             isStopped: voiceState == .parsing || voiceState == .parsed || voiceState == .parseFailed)
-                    .padding(.bottom, 12)
-                    .transition(.opacity)
-                micRow
-                    .padding(.bottom, 36)
-                    .transition(.opacity)
-            }
+            phaseBody
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.cardSurface)
+        .presentationDetents([.height(detentHeight)])
         .onAppear { beginListening() }
-        .onDisappear { asr.stopRecording(); stopNudge() }
-        .onChange(of: voiceState) { _, newState in
-            let isStopped = newState == .parsed || newState == .parseFailed
-            isStopped ? startNudge() : stopNudge()
-        }
+        .onDisappear { asr.stopRecording() }
         .onChange(of: asr.engineLabel) { _, newLabel in
             guard !newLabel.isEmpty, voiceState == .bootstrapping else { return }
             withAnimation(.easeInOut(duration: 0.25)) { voiceState = .listening }
             countdownProgress = 1.0
-            startCountdownAnimation(duration: 3)
+            startCountdownAnimation(duration: VoiceInputStyle.noSpeechTimeout)
             asr.onNoSpeechTimeout = { self.dismiss() }
-            asr.arm(noSpeechTimeout: 3)
+            asr.arm(noSpeechTimeout: VoiceInputStyle.noSpeechTimeout)
         }
         .alert("麦克风权限被拒绝", isPresented: $permissionDenied) {
             Button("Settings") {
@@ -79,7 +70,7 @@ struct VoiceInputView: View {
         }
     }
 
-    // MARK: - Subviews
+    // MARK: - Shared chrome
 
     private var dragHandle: some View {
         Capsule()
@@ -90,71 +81,200 @@ struct VoiceInputView: View {
 
     private var headerRow: some View {
         HStack {
+            Text("语音指令")
+                .font(.title3.bold())
+                .foregroundStyle(.primary)
+            Spacer()
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 28, height: 28)
                     .background(Color(.systemGray5), in: Circle())
             }
-            Spacer()
-            statusIndicator
-            Spacer()
-            Button { handleConfirm() } label: {
-                Text("Confirm")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(confirmButtonColor)
-            }
-            .disabled(voiceState != .parsed)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+    }
+
+    // MARK: - Phase body
+
+    @ViewBuilder
+    private var phaseBody: some View {
+        switch voiceState {
+        case .bootstrapping: connectingPhase
+        case .listening:     idlePhase
+        case .talking:       recordingPhase
+        case .parsing:       processingPhase
+        case .parsed:        resultPhase
+        case .parseFailed:   errorPhase
         }
     }
 
-    private var confirmButtonColor: Color {
-        voiceState == .parsed ? VoiceInputStyle.appBlue : .secondary
+    // MARK: - Connecting phase
+
+    private var connectingPhase: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            ProgressView()
+                .scaleEffect(1.4)
+                .tint(VoiceInputStyle.appBlue)
+            Text("连接中")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
     }
 
-    private var statusIndicator: some View {
+    // MARK: - Idle phase
+
+    private var idlePhase: some View {
+        VStack(spacing: 14) {
+            Spacer()
+            VStack(spacing: 4) {
+                Text("说出指令，例如：")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                Text(verbatim: "\u{201C}给小明加十分，因为他帮忙洗碗\u{201D}")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+            }
+            ZStack {
+                CountdownRingView(progress: countdownProgress)
+                gradientMicButton
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Recording phase
+
+    private var recordingPhase: some View {
+        VStack(spacing: 0) {
+            transcriptArea
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+            Spacer()
+            VStack(spacing: 12) {
+                statusRow
+                WaveBarsView(audioLevel: asr.audioLevel, isActive: true, isStopped: false)
+                ZStack {
+                    PulseRingsView()
+                    gradientMicButton
+                }
+            }
+            .padding(.bottom, 28)
+        }
+    }
+
+    // MARK: - Processing phase
+
+    private var processingPhase: some View {
+        VStack(spacing: 0) {
+            transcriptArea
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+            Spacer()
+            VStack(spacing: 10) {
+                WaveBarsView(audioLevel: 0, isActive: false, isStopped: true)
+                ProgressView()
+                    .tint(VoiceInputStyle.appBlue)
+                Text("豆包正在分析")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 28)
+        }
+    }
+
+    // MARK: - Result phase
+
+    private var resultPhase: some View {
+        VStack(spacing: 12) {
+            transcriptCard
+            llmDoneLabel
+            if let result = parsedResult {
+                IntentCardView(result: result)
+            }
+            HStack(spacing: 12) {
+                retryButton
+                confirmButton
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
+    }
+
+    // MARK: - Error phase
+
+    private var errorPhase: some View {
+        VStack(spacing: 12) {
+            transcriptCard
+            llmDoneLabel
+            ErrorCardView()
+            retryButton
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
+    }
+
+    // MARK: - Shared components
+
+    private var gradientMicButton: some View {
+        Circle()
+            .fill(LinearGradient(
+                colors: [
+                    Color(red: 240/255, green: 112/255, blue: 74/255),
+                    Color(red: 232/255, green: 93/255,  blue: 122/255)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ))
+            .frame(width: VoiceInputStyle.micButtonSize, height: VoiceInputStyle.micButtonSize)
+            .shadow(
+                color: Color(red: 240/255, green: 112/255, blue: 74/255).opacity(0.45),
+                radius: 10, y: 4
+            )
+            .overlay {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(.white)
+            }
+    }
+
+    private var statusRow: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(statusDotColor)
+                .fill(VoiceInputStyle.appBlue)
                 .frame(width: VoiceInputStyle.statusDotSize, height: VoiceInputStyle.statusDotSize)
-            statusText
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var statusDotColor: Color {
-        switch voiceState {
-        case .bootstrapping:                          return .secondary
-        case .listening:                              return VoiceInputStyle.timerOrange
-        case .talking:                                return VoiceInputStyle.appBlue
-        case .parsing, .parsed, .parseFailed:         return .secondary
-        }
-    }
-
-    private var statusText: Text {
-        switch voiceState {
-        case .bootstrapping:
-            return Text("连接中")
-        case .listening:
-            return Text("等待中")
-        case .talking:
-            return asr.engineLabel.isEmpty
-                ? Text("聆听中")
-                : Text("聆听中") + Text(verbatim: "[") + Text(LocalizedStringKey(asr.engineLabel)) + Text(verbatim: "]")
-        case .parsing, .parsed, .parseFailed:
-            return Text("已停止")
+            if asr.engineLabel.isEmpty {
+                Text("聆听中")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                (Text("聆听中") + Text(verbatim: "[") +
+                 Text(LocalizedStringKey(asr.engineLabel)) + Text(verbatim: "]"))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     private var transcriptArea: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            let confirmed = asr.confirmedTranscript
-            let interim = asr.interimTranscript
-
-            let isStopped = voiceState == .parsing || voiceState == .parsed || voiceState == .parseFailed
-            if confirmed.isEmpty && interim.isEmpty && voiceState != .bootstrapping {
+        let confirmed = asr.confirmedTranscript
+        let interim   = asr.interimTranscript
+        let interimColor: Color = voiceState == .parsing
+            ? VoiceInputStyle.confirmedColor
+            : VoiceInputStyle.interimGray
+        return Group {
+            if confirmed.isEmpty && interim.isEmpty {
                 Text("请开始说话…")
                     .font(.system(size: VoiceInputStyle.transcriptFontSize))
                     .foregroundStyle(.secondary)
@@ -162,63 +282,96 @@ struct VoiceInputView: View {
             } else {
                 (Text(confirmed).foregroundColor(VoiceInputStyle.confirmedColor) +
                  Text(interim.isEmpty ? "" : (confirmed.isEmpty ? "" : " ") + interim)
-                    .foregroundColor(isStopped ? VoiceInputStyle.confirmedColor : VoiceInputStyle.interimGray))
+                    .foregroundColor(interimColor))
                     .font(.system(size: VoiceInputStyle.transcriptFontSize))
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
 
-            if voiceState == .parsing || voiceState == .parsed || voiceState == .parseFailed {
-                llmStatusLabel
-                    .padding(.top, 4)
-            }
-
-            if voiceState == .parsed, let result = parsedResult {
-                IntentCardView(result: result).padding(.top, 8)
-            } else if voiceState == .parseFailed {
-                ErrorCardView().padding(.top, 8)
-            }
+    private var transcriptCard: some View {
+        let text = asr.confirmedTranscript.isEmpty
+            ? asr.interimTranscript
+            : asr.confirmedTranscript
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("识别结果")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .kerning(0.5)
+            Text(text)
+                .font(.system(size: 13))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(VoiceInputStyle.transcriptCardBackground,
+                    in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(theme.cardBorder, lineWidth: 1)
+        )
     }
 
-    private var llmStatusLabel: some View {
-        (Text(verbatim: "[") + Text(LocalizedStringKey("豆包")) + Text(verbatim: "] ") +
-         Text(voiceState == .parsing ? LocalizedStringKey("分析中…") : LocalizedStringKey("分析完成")))
-            .font(.system(size: 13))
+    private var llmDoneLabel: some View {
+        (Text(verbatim: "[") +
+         Text(LocalizedStringKey("豆包")) +
+         Text(verbatim: "] ") +
+         Text(LocalizedStringKey("分析完成")))
+            .font(.system(size: 10))
             .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var bootstrapSpinner: some View {
-        VStack(spacing: 14) {
-            ProgressView()
-                .scaleEffect(1.4)
-                .tint(VoiceInputStyle.appBlue)
-            Text("连接中")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+    private var retryButton: some View {
+        Button { handleRetry() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.counterclockwise")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("重试")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(theme.cardSurface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(theme.cardBorder, lineWidth: 1)
+            )
+            .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
     }
 
-    private var micRow: some View {
-        ZStack {
-            if voiceState == .listening {
-                CountdownRingView(progress: countdownProgress)
+    private var confirmButton: some View {
+        Button { handleConfirm() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                Text("确认执行")
+                    .font(.system(size: 14, weight: .semibold))
             }
-            Button { handleMicTap() } label: {
-                Circle()
-                    .fill(VoiceInputStyle.appBlue)
-                    .frame(width: VoiceInputStyle.micButtonSize, height: VoiceInputStyle.micButtonSize)
-                    .shadow(color: VoiceInputStyle.appBlue.opacity(0.4), radius: 8, x: 0, y: 4)
-                    .overlay {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 24))
-                            .foregroundStyle(.white)
-                    }
-            }
-            .rotationEffect(.degrees(micRotation))
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 13)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color(red: 82/255,  green: 200/255, blue: 130/255),
+                        Color(red: 42/255,  green: 171/255, blue: 94/255)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 12)
+            )
+            .shadow(
+                color: Color(red: 42/255, green: 171/255, blue: 94/255).opacity(0.3),
+                radius: 6, y: 3
+            )
+            .foregroundStyle(.white)
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Logic
@@ -249,13 +402,10 @@ struct VoiceInputView: View {
             Task { await self.parseTranscript() }
         }
 
-        // onNoSpeechTimeout wired in onChange(of: asr.engineLabel) after bootstrap completes.
-
         asr.startListening(silenceTimeout: 1.5)
     }
 
-    private func handleMicTap() {
-        guard voiceState == .parsed || voiceState == .parseFailed else { return }
+    private func handleRetry() {
         parsedResult = nil
         asr.reset()
         startSession()
@@ -299,7 +449,7 @@ struct VoiceInputView: View {
                     eventType: result.eventType ?? (delta > 0 ? "add" : "redeem")
                 )
                 NotificationCenter.default.post(name: .pointEventDidChange, object: nil)
-            } catch { /* errors dismissed silently — user can retry */ }
+            } catch { }
             await MainActor.run { dismiss() }
         }
     }
@@ -323,43 +473,51 @@ struct VoiceInputView: View {
         countdownTimer?.invalidate()
         countdownTimer = nil
     }
+}
 
-    private func startNudge() {
-        nudgeTimer?.invalidate()
-        triggerNudge()
-        nudgeTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-            self.triggerNudge()
+// MARK: - PulseRingsView
+
+private struct PulseRingsView: View {
+    @State private var pulse1 = false
+    @State private var pulse2 = false
+
+    var body: some View {
+        ZStack {
+            ring(active: pulse1)
+            ring(active: pulse2)
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                pulse1 = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                    pulse2 = true
+                }
+            }
         }
     }
 
-    private func stopNudge() {
-        nudgeTimer?.invalidate()
-        nudgeTimer = nil
-        withAnimation(.easeOut(duration: 0.15)) { micRotation = 0 }
-    }
-
-    private func triggerNudge() {
-        withAnimation(.easeOut(duration: 0.06)) { micRotation = 15 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-            withAnimation(.spring(response: 0.2, dampingFraction: 0.25)) { self.micRotation = 0 }
-        }
+    private func ring(active: Bool) -> some View {
+        Circle()
+            .fill(Color(red: 240/255, green: 112/255, blue: 74/255).opacity(0.18))
+            .frame(width: VoiceInputStyle.micButtonSize, height: VoiceInputStyle.micButtonSize)
+            .scaleEffect(active ? 1.47 : 1.0)
+            .opacity(active ? 0 : 0.7)
     }
 }
 
 // MARK: - WaveBarsView
-// Uses TimelineView so idle breathe animates continuously without external timers.
 
 private struct WaveBarsView: View {
     let audioLevel: Float
     let isActive: Bool
     let isStopped: Bool
 
-    // Phase offsets for staggered idle breathe (fractions of 2π)
     private let phaseOffsets: [Double] = [0, 0.4, 0.8, 0.4, 0]
 
     var body: some View {
         if isStopped {
-            // Flat static bars — no animation, no TimelineView
             HStack(spacing: VoiceInputStyle.waveBarSpacing) {
                 ForEach(0..<VoiceInputStyle.waveBarsCount, id: \.self) { _ in
                     Capsule()
@@ -397,7 +555,6 @@ private struct WaveBarsView: View {
             let stagger: [Float] = [0.55, 0.75, 1.0, 0.75, 0.55]
             return max(base, base + range * CGFloat(audioLevel * stagger[index]))
         }
-        // Idle: slow sine breathe, low amplitude, staggered
         let breathe = (sin(time * 1.2 + phaseOffsets[index]) + 1) / 2 * 0.35
         return base + range * CGFloat(breathe)
     }
@@ -406,7 +563,7 @@ private struct WaveBarsView: View {
 // MARK: - CountdownRingView
 
 private struct CountdownRingView: View {
-    let progress: CGFloat   // 1.0 = full ring, 0.0 = empty
+    let progress: CGFloat
 
     var body: some View {
         Circle()
@@ -513,5 +670,5 @@ private struct ErrorCardView: View {
 
 #Preview {
     VoiceInputView(familyId: 1)
-        .presentationDetents([.height(VoiceInputStyle.sheetHeight)])
+        .environment(ThemeManager())
 }
