@@ -5,6 +5,7 @@ import SwiftUI
 struct DashboardView: View {
     let membership: FamilyMembership
     var onChildTapped: ((PSChild) -> Void)? = nil
+    var onViewTodosTapped: (() -> Void)? = nil
 
     @State private var widgetOrder: [AppModule] = []
     @State private var draggingModule: AppModule? = nil
@@ -27,8 +28,10 @@ struct DashboardView: View {
                         WidgetCard(
                             module: module,
                             children: children,
+                            familyId: membership.familyId,
                             onAddChild: module == .pointSystem ? { showAddChild = true } : nil,
                             onChildTapped: module == .pointSystem ? onChildTapped : nil,
+                            onViewTodosTapped: module == .familyTodo ? onViewTodosTapped : nil,
                             onGripDragChanged: { drag in handleGripDragChanged(drag, for: module) },
                             onGripDragEnded: { handleGripDragEnded(for: module) }
                         )
@@ -61,6 +64,7 @@ struct DashboardView: View {
                 WidgetCard(
                     module: module,
                     children: children,
+                    familyId: membership.familyId,
                     onAddChild: nil,
                     onChildTapped: nil
                 )
@@ -170,8 +174,10 @@ struct DashboardView: View {
 private struct WidgetCard: View {
     let module: AppModule
     var children: [PSChild] = []
+    var familyId: Int = 0
     var onAddChild: (() -> Void)? = nil
     var onChildTapped: ((PSChild) -> Void)? = nil
+    var onViewTodosTapped: (() -> Void)? = nil
     var onGripDragChanged: ((DragGesture.Value) -> Void)? = nil
     var onGripDragEnded: (() -> Void)? = nil
     @Environment(\.appTheme) private var theme
@@ -226,6 +232,8 @@ private struct WidgetCard: View {
             } else {
                 PointSystemChildrenList(children: children, onAddChild: onAddChild ?? {}, onChildTapped: onChildTapped)
             }
+        } else if module == .familyTodo {
+            FamilyTodoWidget(familyId: familyId, onViewAll: { onViewTodosTapped?() })
         } else {
             Text("Coming soon")
                 .font(.subheadline)

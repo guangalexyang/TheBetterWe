@@ -153,6 +153,8 @@ TheBetterWe/
 ### iOS — Sheets & Presentation
 - **Sheet height:** Use `.presentationDetents([.height(X)])` with a calculated pixel value. `.medium` (~50% screen) is almost always too short; `.large` wastes space. Estimate: header ~70pt + fields ~70pt each + footer ~96pt + spacing.
 - **Dynamic sheet height:** Two detents + `@Binding var detent: PresentationDetent` passed into the sheet. Reset to small detent `onDismiss`. Example: `.height(510)` ↔ `.height(730)` driven by `onChange(of:)` inside the sheet.
+- **Per-state sheet height (multi-state machines):** For sheets that pass through many states (e.g. `VoiceInputView`), use a `detentHeight: CGFloat` computed property that switches on the state enum, and pass `[.height(detentHeight)]` to `.presentationDetents`. SwiftUI animates the resize automatically. The caller must NOT also set `.presentationDetents`. Store height constants in the style enum, not inline.
+- **Conditional gradient vs Color background:** Use the `@ViewBuilder` form of `.background { }` — `if selected { Shape().fill(LinearGradient(...)) } else { Shape().fill(Color) }`. Avoids `AnyShapeStyle` boilerplate; compiles cleanly because the closure accepts any `View`.
 - **DatePicker compact in sheets:** Always add `.fixedSize()` to `DatePicker(.compact)` — without it the picker's intrinsic width inflates the parent layout and can widen the sheet.
 - **GeometryReader in .background():** Never use `GeometryReader` inside `.background()` on any view that contains a `TextField`. It creates UIKit Auto Layout views that conflict with the keyboard's internal constraints, producing `UIViewAlertForUnsatisfiableConstraints` on every tap.
 - **lineLimit ternary:** `.lineLimit(isX ? 1...5 : 1)` is a type error. Use `.lineLimit(isX ? 1...5 : 1...1)` — both branches must be `ClosedRange<Int>`.
@@ -201,6 +203,8 @@ Build UI **view by view** — never scaffold multiple views at once without user
    - ✅ Child card action menu — custom bottom action sheet (`fullScreenCover`, split fade/slide animation); delete confirmation is custom centered card overlay (not system alert)
    - ✅ `event_type` on `point_events` — `add`/`deduct`/`redeem`; migration 007 backfills existing rows from delta sign; voice parse LLM uses `action: "add"|"deduct"|"redeem"` field (not `isAdd: boolean`); `ActivityRow` icon/color/label driven by `eventType`
    - ✅ Feature toggles for `familyTodo`, `familyNotes`, `orderFromMe` — tabs and dashboard cards gated by `AppModule.isToggleActive`; all three currently **off** on server (pending implementation)
+   - ✅ VoiceInputView UI redesign — 6-state per-state sheet heights, gradient mic (68pt), pulse rings in recording, "语音指令 + ×" header on all phases, 5s no-speech timeout (was 3s), mic nudge animation removed; `VoiceInputStyle.sheetHeight` removed, replaced by per-state constants
+   - ✅ AddChildView UI redesign — top bar Cancel + centered title; live avatar (gradient + emoji reflecting selected gender, camera badge is decorative only — no photo upload, PSChild has no photo field); form card with compact DatePicker birthday (hasBirthday toggle + × clear), Boy/Girl gradient cards; Reward Profile tip; gradient capsule submit button; light/dark via UIColor dynamic providers
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
 3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
 4. **Phase 4** — Doubao API (in-app natural language point recording) ✅ done — voice parse endpoint at `/voice/parse`

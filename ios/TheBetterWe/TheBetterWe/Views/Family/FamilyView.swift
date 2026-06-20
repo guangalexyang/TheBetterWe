@@ -105,14 +105,22 @@ struct FamilyView: View {
     private var tabContent: some View {
         switch selectedTab {
         case .dashboard:
-            DashboardView(membership: membership, onChildTapped: { child in
-                pointSystemInitialChildId = child.memberId
-                selectedTab = .module(.pointSystem)
-            })
+            DashboardView(
+                membership: membership,
+                onChildTapped: { child in
+                    pointSystemInitialChildId = child.memberId
+                    selectedTab = .module(.pointSystem)
+                },
+                onViewTodosTapped: {
+                    selectedTab = .module(.familyTodo)
+                }
+            )
         case .module(let m):
             switch m {
             case .pointSystem:
                 PointSystemView(membership: membership, onLogOut: onLogOut, initialChildId: pointSystemInitialChildId)
+            case .familyTodo:
+                FamilyTodoView(familyId: membership.familyId)
             default:
                 Text("TODO: \(m.rawValue)")
                     .foregroundStyle(.secondary)
