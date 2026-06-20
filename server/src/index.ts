@@ -8,6 +8,7 @@ import auth from './routes/auth';
 import families from './routes/families';
 import pointSystem from './routes/pointSystem';
 import voiceParse from './routes/voiceParse';
+import familyTodos from './routes/familyTodos';
 
 const app = express();
 const port = process.env.PORT ?? 3000;
@@ -21,6 +22,7 @@ app.get('/health', (_req, res) => {
 app.use('/auth', auth);
 app.use('/families', families);
 app.use('/families', pointSystem);
+app.use('/families', familyTodos);
 app.use('/config/feature-toggles', featureToggles);
 app.use('/voice', voiceParse);
 
