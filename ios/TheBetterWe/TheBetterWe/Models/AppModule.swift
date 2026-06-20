@@ -6,8 +6,8 @@ struct ModuleFeature {
 }
 
 enum AppModule: String, CaseIterable, Hashable {
-    case familyTodo
     case pointSystem
+    case familyTodo
     case familyNotes
     case orderFromMe
 
@@ -34,7 +34,7 @@ enum AppModule: String, CaseIterable, Hashable {
 
     var title: LocalizedStringKey {
         switch self {
-        case .familyTodo:  return "Family TODO"
+        case .familyTodo:  return LocalizedStringKey("family_todo_tab_title")
         case .pointSystem: return "Point System"
         case .familyNotes: return "Family Notes"
         case .orderFromMe: return "OrderFromMe"
