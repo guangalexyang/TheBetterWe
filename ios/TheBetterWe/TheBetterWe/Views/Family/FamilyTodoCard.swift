@@ -6,9 +6,11 @@ struct FamilyTodoCard: View {
     let onReactivate: () -> Void
 
     @State private var descriptionExpanded = false
+    @State private var isAnimatingComplete = false
     @Environment(\.appTheme) private var theme
 
     private var isCompleted: Bool { todo.completedAt != nil }
+    private var showAsCompleted: Bool { isAnimatingComplete || isCompleted }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -18,10 +20,7 @@ struct FamilyTodoCard: View {
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(todo.title)
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(isCompleted ? .secondary : .primary)
-                            .strikethrough(isCompleted)
+                        titleText
                         Spacer()
                         priorityBadge
                     }
@@ -58,29 +57,33 @@ struct FamilyTodoCard: View {
         }
     }
 
+    // MARK: - Title with animated strikethrough
+
+    private var titleText: some View {
+        StrikeableText(text: todo.title, font: .system(size: 15, weight: .medium), isStriking: showAsCompleted)
+    }
+
+    // MARK: - Checkbox
+
     private var checkboxButton: some View {
         Button {
-            if isCompleted { onReactivate() } else { onComplete() }
-        } label: {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isCompleted ? theme.primaryAccent : Color.clear)
-                    .overlay {
-                        if !isCompleted {
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(theme.cardBorder, lineWidth: 1.5)
-                        }
-                    }
-                if isCompleted {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
+            if isCompleted {
+                onReactivate()
+            } else if !isAnimatingComplete {
+                withAnimation(.easeOut(duration: CheckOffAnimation.duration)) {
+                    isAnimatingComplete = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + CheckOffAnimation.delay) {
+                    onComplete()
                 }
             }
-            .frame(width: 26, height: 26)
+        } label: {
+            CheckOffBox(isChecked: showAsCompleted, size: 26, cornerRadius: 8, checkmarkSize: 12)
         }
         .buttonStyle(.plain)
     }
+
+    // MARK: - Priority badge
 
     @ViewBuilder
     private var priorityBadge: some View {
@@ -108,6 +111,8 @@ struct FamilyTodoCard: View {
                 .clipShape(Capsule())
         }
     }
+
+    // MARK: - Due date
 
     @ViewBuilder
     private var dueDateRow: some View {
