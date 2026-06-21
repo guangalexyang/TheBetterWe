@@ -3,20 +3,42 @@ import SwiftUI
 struct CreateFamilyTodoSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
+
     let store: FamilyTodoStore
-
-    @State private var title: String = ""
-    @State private var priority: String = "medium"
-    @State private var todoType: String = "family"
-    @State private var hasDueDate: Bool = false
-    @State private var dueDate: Date = Calendar.current.startOfDay(for: Date())
-    @State private var hasLocation: Bool = false
-    @State private var location: String = ""
-    @State private var notes: String = ""
-    @State private var isSaving: Bool = false
-
+    let existingTodo: FamilyTodo?
     @Binding var detent: PresentationDetent
 
+    @State private var title: String
+    @State private var priority: String
+    @State private var todoType: String
+    @State private var hasDueDate: Bool
+    @State private var dueDate: Date
+    @State private var hasLocation: Bool
+    @State private var location: String
+    @State private var notes: String
+    @State private var isSaving: Bool
+
+    init(store: FamilyTodoStore, detent: Binding<PresentationDetent>, existingTodo: FamilyTodo? = nil) {
+        self.store = store
+        self._detent = detent
+        self.existingTodo = existingTodo
+
+        let todo = existingTodo
+        _title       = State(initialValue: todo?.title ?? "")
+        _priority    = State(initialValue: todo?.priority ?? "medium")
+        _todoType    = State(initialValue: todo?.todoType ?? "family")
+        _hasDueDate  = State(initialValue: todo?.dueAt != nil)
+        _dueDate     = State(initialValue: {
+            if let dueAt = todo?.dueAt { return Date(timeIntervalSince1970: TimeInterval(dueAt)) }
+            return Calendar.current.startOfDay(for: Date())
+        }())
+        _hasLocation = State(initialValue: todo?.location != nil)
+        _location    = State(initialValue: todo?.location ?? "")
+        _notes       = State(initialValue: todo?.description ?? "")
+        _isSaving    = State(initialValue: false)
+    }
+
+    private var isEditing: Bool { existingTodo != nil }
     private var expanded: Bool { hasDueDate || hasLocation }
     private var canSave: Bool { !title.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -44,7 +66,7 @@ struct CreateFamilyTodoSheet: View {
                 VStack(alignment: .leading, spacing: 24) {
                     titleField
                     prioritySection
-                    typeSection
+                    if !isEditing { typeSection }
                     dueDateSection
                     locationSection
                     notesSection
@@ -77,7 +99,7 @@ struct CreateFamilyTodoSheet: View {
                 .padding(.top, 12)
                 .padding(.bottom, 16)
             HStack {
-                Text(NSLocalizedString("family_todo_create_title", comment: ""))
+                Text(NSLocalizedString(isEditing ? "family_todo_edit_title" : "family_todo_create_title", comment: ""))
                     .font(.headline.weight(.bold))
                 Spacer()
                 Button { dismiss() } label: {
@@ -283,15 +305,28 @@ struct CreateFamilyTodoSheet: View {
 
     private func save() async {
         isSaving = true
-        let body = CreateTodoBody(
-            todoType:    todoType,
-            title:       title.trimmingCharacters(in: .whitespaces),
-            description: notes.isEmpty ? nil : notes,
-            location:    hasLocation && !location.isEmpty ? location : nil,
-            priority:    priority,
-            dueAt:       hasDueDate ? Int(dueDate.timeIntervalSince1970) : nil
-        )
-        await store.create(body: body)
+        if let existing = existingTodo {
+            let intVal: Int? = hasDueDate ? Int(dueDate.timeIntervalSince1970) : nil
+            let dueAtValue: Int?? = .some(intVal)
+            let body = PatchTodoBody(
+                title:       title.trimmingCharacters(in: .whitespaces),
+                description: notes.isEmpty ? nil : notes,
+                location:    hasLocation && !location.isEmpty ? location : nil,
+                priority:    priority,
+                dueAt:       dueAtValue
+            )
+            await store.update(todoId: existing.id, body: body)
+        } else {
+            let body = CreateTodoBody(
+                todoType:    todoType,
+                title:       title.trimmingCharacters(in: .whitespaces),
+                description: notes.isEmpty ? nil : notes,
+                location:    hasLocation && !location.isEmpty ? location : nil,
+                priority:    priority,
+                dueAt:       hasDueDate ? Int(dueDate.timeIntervalSince1970) : nil
+            )
+            await store.create(body: body)
+        }
         isSaving = false
         dismiss()
     }

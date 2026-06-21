@@ -93,25 +93,30 @@ private struct WidgetTaskRow: View {
     let todo: FamilyTodo
     let onComplete: () -> Void
 
+    @State private var isAnimatingComplete = false
     @Environment(\.appTheme) private var theme
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Button { onComplete() } label: {
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(theme.cardBorder, lineWidth: 1.5)
-                    .frame(width: 18, height: 18)
+        Button {
+            guard !isAnimatingComplete else { return }
+            withAnimation(.easeOut(duration: CheckOffAnimation.duration)) {
+                isAnimatingComplete = true
             }
-            .buttonStyle(.plain)
-            HStack {
-                Text(todo.title)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                Spacer()
-                priorityBadge
+            DispatchQueue.main.asyncAfter(deadline: .now() + CheckOffAnimation.delay) {
+                onComplete()
             }
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                CheckOffBox(isChecked: isAnimatingComplete, size: 18, cornerRadius: 4, checkmarkSize: 9)
+                HStack {
+                    StrikeableText(text: todo.title, font: .system(size: 13, weight: .medium), isStriking: isAnimatingComplete, lineLimit: 1)
+                    Spacer()
+                    priorityBadge
+                }
+            }
+            .padding(.vertical, 2)
         }
-        .padding(.vertical, 2)
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

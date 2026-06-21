@@ -6,7 +6,9 @@ struct FamilyTodoView: View {
     @State private var filter: String = "all"
     @State private var swipeOffsets: [Int: CGFloat] = [:]
     @State private var showCreate: Bool = false
-    @State private var sheetDetent: PresentationDetent = .height(560)
+    @State private var createDetent: PresentationDetent = .height(560)
+    @State private var editingTodo: FamilyTodo? = nil
+    @State private var editDetent: PresentationDetent = .height(560)
     @State private var completedExpanded: Bool = false
     @Environment(\.appTheme) private var theme
 
@@ -43,10 +45,16 @@ struct FamilyTodoView: View {
         }
         .task { await store.load(familyId: familyId) }
         .sheet(isPresented: $showCreate) {
-            CreateFamilyTodoSheet(store: store, detent: $sheetDetent)
-                .presentationDetents([.height(560), .height(680)], selection: $sheetDetent)
+            CreateFamilyTodoSheet(store: store, detent: $createDetent)
+                .presentationDetents([.height(560), .height(680)], selection: $createDetent)
                 .presentationDragIndicator(.visible)
-                .onDisappear { sheetDetent = .height(560) }
+                .onDisappear { createDetent = .height(560) }
+        }
+        .sheet(item: $editingTodo) { todo in
+            CreateFamilyTodoSheet(store: store, detent: $editDetent, existingTodo: todo)
+                .presentationDetents([.height(560), .height(680)], selection: $editDetent)
+                .presentationDragIndicator(.visible)
+                .onDisappear { editDetent = .height(560) }
         }
     }
 
@@ -78,7 +86,19 @@ struct FamilyTodoView: View {
                             todo: todo,
                             onComplete: { Task { await store.complete(todoId: todo.id) } },
                             onReactivate: { Task { await store.reactivate(todoId: todo.id) } },
+                            onEdit: {
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                                    swipeOffsets[todo.id] = 0
+                                }
+                                editingTodo = todo
+                            },
                             onDelete: { Task { await store.delete(todoId: todo.id) } },
+                            onStartSwipe: {
+                                let id = todo.id
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    for key in swipeOffsets.keys where key != id { swipeOffsets[key] = 0 }
+                                }
+                            },
                             swipeOffset: swipeBinding(for: todo.id)
                         )
                         .padding(.horizontal, 16)
@@ -156,7 +176,19 @@ struct FamilyTodoView: View {
                         todo: todo,
                         onComplete: {},
                         onReactivate: { Task { await store.reactivate(todoId: todo.id) } },
+                        onEdit: {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                                swipeOffsets[todo.id] = 0
+                            }
+                            editingTodo = todo
+                        },
                         onDelete: { Task { await store.delete(todoId: todo.id) } },
+                        onStartSwipe: {
+                            let id = todo.id
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                for key in swipeOffsets.keys where key != id { swipeOffsets[key] = 0 }
+                            }
+                        },
                         swipeOffset: swipeBinding(for: todo.id)
                     )
                     .padding(.horizontal, 16)
@@ -166,37 +198,65 @@ struct FamilyTodoView: View {
     }
 }
 
-// MARK: - Swipe-to-delete wrapper (FamilyTodoView only)
+// MARK: - Swipe-to-delete/edit wrapper (FamilyTodoView only)
 
 private struct SwipableCard: View {
     let todo: FamilyTodo
     let onComplete: () -> Void
     let onReactivate: () -> Void
+    let onEdit: () -> Void
     let onDelete: () -> Void
+    let onStartSwipe: () -> Void
     @Binding var swipeOffset: CGFloat
 
+    private let editRevealWidth: CGFloat = 72
     private let deleteRevealWidth: CGFloat = 76
+    private var totalRevealWidth: CGFloat { editRevealWidth + deleteRevealWidth + 4 }
+
+    private var buttonOpacity: Double {
+        Double(min(1, max(0, -swipeOffset / (totalRevealWidth * 0.4))))
+    }
 
     var body: some View {
         ZStack(alignment: .trailing) {
-            Button {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { swipeOffset = 0 }
-                onDelete()
-            } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 16, weight: .medium))
-                    Text(NSLocalizedString("Delete", comment: ""))
-                        .font(.caption.weight(.medium))
+            HStack(spacing: 4) {
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { swipeOffset = 0 }
+                    onEdit()
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 16, weight: .medium))
+                        Text(NSLocalizedString("family_todo_edit_action", comment: ""))
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: editRevealWidth)
+                    .frame(maxHeight: .infinity)
+                    .background(Color.orange)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
-                .foregroundStyle(.white)
-                .frame(width: deleteRevealWidth)
-                .frame(maxHeight: .infinity)
-                .background(Color.red)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .buttonStyle(.plain)
+
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { swipeOffset = 0 }
+                    onDelete()
+                } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .medium))
+                        Text(NSLocalizedString("Delete", comment: ""))
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: deleteRevealWidth)
+                    .frame(maxHeight: .infinity)
+                    .background(Color.red)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .opacity(Double(min(1, max(0, -swipeOffset / (deleteRevealWidth * 0.5)))))
+            .opacity(buttonOpacity)
 
             FamilyTodoCard(todo: todo, onComplete: onComplete, onReactivate: onReactivate)
                 .offset(x: swipeOffset)
@@ -205,7 +265,8 @@ private struct SwipableCard: View {
                         .onChanged { value in
                             let dx = value.translation.width
                             if dx < 0 {
-                                swipeOffset = max(dx, -deleteRevealWidth)
+                                onStartSwipe()
+                                swipeOffset = max(dx, -totalRevealWidth)
                             } else if swipeOffset < 0 {
                                 swipeOffset = min(0, swipeOffset + dx)
                             }
@@ -213,8 +274,8 @@ private struct SwipableCard: View {
                         .onEnded { value in
                             let velocity = value.predictedEndTranslation.width
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                if swipeOffset < -(deleteRevealWidth / 2) || velocity < -100 {
-                                    swipeOffset = -deleteRevealWidth
+                                if swipeOffset < -(totalRevealWidth / 2) || velocity < -100 {
+                                    swipeOffset = -totalRevealWidth
                                 } else {
                                     swipeOffset = 0
                                 }

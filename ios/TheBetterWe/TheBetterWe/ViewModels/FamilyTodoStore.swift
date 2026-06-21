@@ -62,6 +62,19 @@ final class FamilyTodoStore {
         }
     }
 
+    func update(todoId: Int, body: PatchTodoBody) async {
+        do {
+            let updated = try await FamilyTodoService.patchTodo(familyId: familyId, todoId: todoId, body: body)
+            if let idx = active.firstIndex(where: { $0.id == todoId }) {
+                active[idx] = updated
+            } else if let idx = completed.firstIndex(where: { $0.id == todoId }) {
+                completed[idx] = updated
+            }
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
     func delete(todoId: Int) async {
         do {
             try await FamilyTodoService.deleteTodo(familyId: familyId, todoId: todoId)
