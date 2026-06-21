@@ -74,7 +74,7 @@ struct FamilyTodoView: View {
                     emptyState
                 } else {
                     ForEach(filteredActive) { todo in
-                        FamilyTodoCard(
+                        SwipableCard(
                             todo: todo,
                             onComplete: { Task { await store.complete(todoId: todo.id) } },
                             onReactivate: { Task { await store.reactivate(todoId: todo.id) } },
@@ -82,7 +82,7 @@ struct FamilyTodoView: View {
                             swipeOffset: swipeBinding(for: todo.id)
                         )
                         .padding(.horizontal, 16)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .transition(.opacity)
                     }
 
                     if !store.completed.isEmpty {
@@ -152,7 +152,7 @@ struct FamilyTodoView: View {
 
             if completedExpanded {
                 ForEach(store.completed) { todo in
-                    FamilyTodoCard(
+                    SwipableCard(
                         todo: todo,
                         onComplete: {},
                         onReactivate: { Task { await store.reactivate(todoId: todo.id) } },
@@ -163,5 +163,65 @@ struct FamilyTodoView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Swipe-to-delete wrapper (FamilyTodoView only)
+
+private struct SwipableCard: View {
+    let todo: FamilyTodo
+    let onComplete: () -> Void
+    let onReactivate: () -> Void
+    let onDelete: () -> Void
+    @Binding var swipeOffset: CGFloat
+
+    private let deleteRevealWidth: CGFloat = 76
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button {
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { swipeOffset = 0 }
+                onDelete()
+            } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16, weight: .medium))
+                    Text(NSLocalizedString("Delete", comment: ""))
+                        .font(.caption.weight(.medium))
+                }
+                .foregroundStyle(.white)
+                .frame(width: deleteRevealWidth)
+                .frame(maxHeight: .infinity)
+                .background(Color.red)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+            .opacity(Double(min(1, max(0, -swipeOffset / (deleteRevealWidth * 0.5)))))
+
+            FamilyTodoCard(todo: todo, onComplete: onComplete, onReactivate: onReactivate)
+                .offset(x: swipeOffset)
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 10, coordinateSpace: .local)
+                        .onChanged { value in
+                            let dx = value.translation.width
+                            if dx < 0 {
+                                swipeOffset = max(dx, -deleteRevealWidth)
+                            } else if swipeOffset < 0 {
+                                swipeOffset = min(0, swipeOffset + dx)
+                            }
+                        }
+                        .onEnded { value in
+                            let velocity = value.predictedEndTranslation.width
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                if swipeOffset < -(deleteRevealWidth / 2) || velocity < -100 {
+                                    swipeOffset = -deleteRevealWidth
+                                } else {
+                                    swipeOffset = 0
+                                }
+                            }
+                        }
+                )
+        }
+        .clipped()
     }
 }

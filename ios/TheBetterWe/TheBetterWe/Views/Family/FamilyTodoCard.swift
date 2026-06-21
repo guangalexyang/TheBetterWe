@@ -4,63 +4,13 @@ struct FamilyTodoCard: View {
     let todo: FamilyTodo
     let onComplete: () -> Void
     let onReactivate: () -> Void
-    let onDelete: () -> Void
 
-    @Binding var swipeOffset: CGFloat
     @State private var descriptionExpanded = false
     @Environment(\.appTheme) private var theme
 
-    private let deleteRevealWidth: CGFloat = 76
     private var isCompleted: Bool { todo.completedAt != nil }
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            Button {
-                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) { swipeOffset = 0 }
-                onDelete()
-            } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 16, weight: .medium))
-                    Text(NSLocalizedString("Delete", comment: ""))
-                        .font(.caption.weight(.medium))
-                }
-                .foregroundStyle(.white)
-                .frame(width: deleteRevealWidth)
-                .frame(maxHeight: .infinity)
-                .background(Color.red)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .buttonStyle(.plain)
-
-            cardBody
-                .offset(x: swipeOffset)
-                .highPriorityGesture(
-                    DragGesture(minimumDistance: 10, coordinateSpace: .local)
-                        .onChanged { value in
-                            let dx = value.translation.width
-                            if dx < 0 {
-                                swipeOffset = max(dx, -deleteRevealWidth)
-                            } else if swipeOffset < 0 {
-                                swipeOffset = min(0, swipeOffset + dx)
-                            }
-                        }
-                        .onEnded { value in
-                            let velocity = value.predictedEndTranslation.width
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                if swipeOffset < -(deleteRevealWidth / 2) || velocity < -100 {
-                                    swipeOffset = -deleteRevealWidth
-                                } else {
-                                    swipeOffset = 0
-                                }
-                            }
-                        }
-                )
-        }
-        .clipped()
-    }
-
-    private var cardBody: some View {
         HStack(alignment: .top, spacing: 12) {
             checkboxButton
             Button {
