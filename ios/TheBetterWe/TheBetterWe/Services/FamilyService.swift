@@ -28,11 +28,8 @@ enum FamilyService {
     }
 
     static func deleteFamily(id: Int) async throws {
-        guard let token = AuthService.accessToken else { throw FamilyError.unauthorized }
-        var request = URLRequest(url: baseURL.appending(path: "/families/\(id)"))
-        request.httpMethod = "DELETE"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        _ = try await send(request, expectedStatus: 204)
+        let url = URL(string: baseURL.absoluteString + "/families/\(id)")!
+        _ = try await send(url: url, method: "DELETE", expectedStatus: 204)
     }
 
     static func createFamily(name: String, displayName: String, modules: [String]) async throws -> FamilyMembership {
@@ -55,30 +52,26 @@ enum FamilyService {
     // MARK: - Helpers
 
     private static func get(path: String) async throws -> Data {
-        guard let token = AuthService.accessToken else { throw FamilyError.unauthorized }
-        var request = URLRequest(url: baseURL.appending(path: path))
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        return try await send(request, expectedStatus: 200)
+        let url = URL(string: baseURL.absoluteString + path)!
+        return try await send(url: url, expectedStatus: 200)
     }
 
     private static func post<B: Encodable>(path: String, body: B, expectedStatus: Int) async throws -> Data {
-        guard let token = AuthService.accessToken else { throw FamilyError.unauthorized }
-        var request = URLRequest(url: baseURL.appending(path: path))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try? JSONEncoder().encode(body)
-        return try await send(request, expectedStatus: expectedStatus)
+        let url = URL(string: baseURL.absoluteString + path)!
+        let bodyData = try? JSONEncoder().encode(body)
+        return try await send(url: url, method: "POST", body: bodyData, expectedStatus: expectedStatus)
     }
 
-    private static func send(_ request: URLRequest, expectedStatus: Int) async throws -> Data {
-        let (data, response): (Data, URLResponse)
+    @discardableResult
+    private static func send(url: URL, method: String = "GET", body: Data? = nil, expectedStatus: Int) async throws -> Data {
+        let (data, status): (Data, Int)
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, status) = try await AuthService.authorizedData(for: url, method: method, body: body)
+        } catch AuthError.sessionExpired {
+            throw FamilyError.unauthorized
         } catch {
             throw FamilyError.network
         }
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 401 { throw FamilyError.unauthorized }
         if status == 404 { throw FamilyError.notFound }
         if status == 409 { throw FamilyError.alreadyMember }

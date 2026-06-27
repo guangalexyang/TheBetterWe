@@ -146,6 +146,11 @@ TheBetterWe/
 ### iOS — Time & Calendar
 - **Calendar day change detection:** Use `.onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged))` to reload data at local midnight while the app is in foreground. Pair with a `scenePhase → .active` + date-string comparison (`localDateString() != lastLoadedDate`) to handle the case where midnight passed while the app was backgrounded. Never use `Task.sleep(nanoseconds:)` for this — it uses `SuspendingClock` and pauses during device sleep, so it won't fire at midnight if the device was asleep.
 
+### iOS — Gestures
+- **highPriorityGesture for swipe-to-delete over child buttons:** When a card contains child `Button` views (checkbox, expand toggle) AND a `DragGesture` for swipe-to-delete, use `.highPriorityGesture(DragGesture(minimumDistance: 10, coordinateSpace: .local))` instead of `.gesture(...)`. Taps still land on child buttons because a tap never travels 10pt — the gestures don't conflict.
+- **Swipe offset must live in the parent, not the card:** Store as `@State private var swipeOffsets: [Int: CGFloat] = [:]` in the list view; pass `@Binding var swipeOffset: CGFloat` to each card. When the user switches a filter/tab, zero the dictionary before the animation (`swipeOffsets = [:]` in the button action). `.id("\(filter)-\(todo.id)")` resets `@State` on new views but departing cards still animate out with `swipeOffset = -76`, revealing the delete button. Zeroing the binding before the transition fixes this.
+- **Inline Binding(get:set:) causes type-checker timeout in ForEach:** Extract to a private method: `private func swipeBinding(for id: Int) -> Binding<CGFloat> { Binding(get: { swipeOffsets[id] ?? 0 }, set: { swipeOffsets[id] = $0 }) }`. Never inline `Binding(get:set:)` directly as a call-site argument inside a `ForEach` closure.
+
 ### iOS — Layout
 - **Shape without height in HStack expands infinitely:** A `RoundedRectangle` (or any Shape) with only `width` constrained inside a `HStack` proposes infinite height, pulling the entire card to fill available vertical space. Fix: add `.fixedSize(horizontal: false, vertical: true)` on the `HStack` so it hugs content height.
 - **TimelineView keeps running in all states:** `TimelineView(.animation)` animates continuously regardless of external state. Gate it behind a conditional — render a plain static view when animation should stop (e.g. stopped/idle state).
@@ -167,6 +172,14 @@ TheBetterWe/
 - **Activity date display — use `createdAt`, not `eventDate`:** For showing when an activity happened, use `Date(timeIntervalSince1970: TimeInterval(createdAt))`. Never parse the `eventDate` YYYY-MM-DD string as UTC midnight for display — for UTC-N users, midnight UTC on date D is still D-1 locally, causing today's events to show as "Yesterday".
 - **Date-only display:** Use `setLocalizedDateFormatFromTemplate("MMMd")` (or `"MMMdyyyy"` for cross-year dates) for all user-facing date strings — it automatically adds locale-specific suffixes like "日" in Chinese. Never hardcode `dateFormat = "MMM d"`.
 - **Timezone-correct period queries:** iOS must send the device's local date as `?localDate=YYYY-MM-DD` on any request whose result depends on "today / this week / this month". Use `localDateString()` (defined in `PointSystemService.swift`) for this. Also pass `date: localDateString()` in POST bodies for event records so `event_date` stores device local date.
+
+### iOS — Voice Intent Classification
+
+- **Keyword-triggered intents:** Each intent in `/voice/parse` owns its trigger keywords. Never use "everything else → intent X" as a fallback — it breaks extensibility when new intents are added.
+- **Current intents:** `points` (分/积分/加分/扣分/兑换 / points/deduct/redeem/reward) · `create_todo` (任务/待办/提醒/记一下/帮我加 / task/todo/remind/remember)
+- **No match → `{"intentType":"unknown"}` → server returns `lowConfidence`**
+- **`提醒我` → `todoType: "personal"`; `提醒大家/remind everyone` → `"family"`; bare `提醒` → `"family"` (default)**
+- **Adding a new intent:** add its keyword block to the LLM prompt classification rule; add a new branch in the server handler; add `intentType` handling in `VoiceInputView.handleConfirm()` and result phase.
 
 ### Server — WebSocket (ASR proxy)
 - **WebSocket upgrade:** Use `http.createServer(app)` + `WebSocketServer({ noServer: true })`. Handle upgrades via `server.on('upgrade', ...)` and route by pathname. `app.listen()` does not support WebSocket upgrades.
@@ -202,9 +215,12 @@ Build UI **view by view** — never scaffold multiple views at once without user
    - ✅ Child edit/delete — ▼ badge trigger in ChildCardView; AddChildView reused for edit mode (title always "宝宝信息"); server PUT + cascading DELETE routes; deployed
    - ✅ Child card action menu — custom bottom action sheet (`fullScreenCover`, split fade/slide animation); delete confirmation is custom centered card overlay (not system alert)
    - ✅ `event_type` on `point_events` — `add`/`deduct`/`redeem`; migration 007 backfills existing rows from delta sign; voice parse LLM uses `action: "add"|"deduct"|"redeem"` field (not `isAdd: boolean`); `ActivityRow` icon/color/label driven by `eventType`
-   - ✅ Feature toggles for `familyTodo`, `familyNotes`, `orderFromMe` — tabs and dashboard cards gated by `AppModule.isToggleActive`; all three currently **off** on server (pending implementation)
+   - ✅ Feature toggles for `familyTodo`, `familyNotes`, `orderFromMe` — tabs and dashboard cards gated by `AppModule.isToggleActive`; `familyTodo` now **on**; `familyNotes` and `orderFromMe` still **off** (pending implementation)
+   - ✅ Family TODO — `family_todos` table (migration 008); `GET/POST/PATCH/DELETE /families/:id/todos`; `FamilyTodoView` (filter pills, swipe-delete, expandable description), `FamilyTodoCard` (`@Binding swipeOffset` from parent), `CreateFamilyTodoSheet` (detent 560↔680), `FamilyTodoWidget` in dashboard (check-off only, no delete); `familyTodo` toggle **on**
    - ✅ VoiceInputView UI redesign — 6-state per-state sheet heights, gradient mic (68pt), pulse rings in recording, "语音指令 + ×" header on all phases, 5s no-speech timeout (was 3s), mic nudge animation removed; `VoiceInputStyle.sheetHeight` removed, replaced by per-state constants
    - ✅ AddChildView UI redesign — top bar Cancel + centered title; live avatar (gradient + emoji reflecting selected gender, camera badge is decorative only — no photo upload, PSChild has no photo field); form card with compact DatePicker birthday (hasBirthday toggle + × clear), Boy/Girl gradient cards; Reward Profile tip; gradient capsule submit button; light/dark via UIColor dynamic providers
+   - ✅ Family TODO swipe-left edit + animation — `SwipableCard` private wrapper in `FamilyTodoView` only; orange Edit + red Delete buttons revealed on swipe; button opacity tied to swipe progress (no red flash); single-open constraint via `onStartSwipe`; edit pre-populates `CreateFamilyTodoSheet`; 0.5s check-off animation (strikethrough + fade) in both `FamilyTodoCard` and `WidgetTaskRow`; shared utils in `FamilyTodoCheckOff.swift`
+   - ✅ Voice TODO creation — `/voice/parse` classifies intent by trigger keywords: `points` (积分 keywords) vs `create_todo` (任务/提醒/todo/remind keywords) vs `unknown`; `提醒我` → personal todo; urgency words → high priority; LLM extracts title + type + priority + note + due date; `TodoIntentCardView` in voice sheet; confirm calls `FamilyTodoService.createTodo`; `familyTodoDidChange` notification reloads widget + list view
 2. **Phase 2** — OrderFromMe integration (recipes, shopping list ↔ TODOs)
 3. **Phase 3** — RewardMe standalone integration (if needed beyond Phase 1 Point System)
 4. **Phase 4** — Doubao API (in-app natural language point recording) ✅ done — voice parse endpoint at `/voice/parse`

@@ -213,21 +213,16 @@ enum PointSystemService {
             let date: String?
         }
 
-        guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: try url(for: "/families/\(familyId)/point-system/parse-voice-command"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try? JSONEncoder().encode(Body(utterance: utterance))
-
-        let (data, response): (Data, URLResponse)
+        let reqURL = try url(for: "/families/\(familyId)/point-system/parse-voice-command")
+        let bodyData = try? JSONEncoder().encode(Body(utterance: utterance))
+        let (data, status): (Data, Int)
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, status) = try await AuthService.authorizedData(for: reqURL, method: "POST", body: bodyData)
+        } catch AuthError.sessionExpired {
+            throw PointSystemError.unauthorized
         } catch {
             throw PointSystemError.network
         }
-
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         switch status {
         case 200:
             guard let parsed = try? JSONDecoder().decode(Response.self, from: data) else {
@@ -265,48 +260,33 @@ enum PointSystemService {
     }
 
     private static func get(path: String) async throws -> Data {
-        guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: try url(for: path))
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        return try await send(request, expectedStatus: 200)
+        return try await send(url: try url(for: path), expectedStatus: 200)
     }
 
     private static func post<B: Encodable>(path: String, body: B, expectedStatus: Int) async throws -> Data {
-        guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: try url(for: path))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try? JSONEncoder().encode(body)
-        return try await send(request, expectedStatus: expectedStatus)
+        let bodyData = try? JSONEncoder().encode(body)
+        return try await send(url: try url(for: path), method: "POST", body: bodyData, expectedStatus: expectedStatus)
     }
 
     private static func put<B: Encodable>(path: String, body: B) async throws -> Data {
-        guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: try url(for: path))
-        request.httpMethod = "PUT"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try? JSONEncoder().encode(body)
-        return try await send(request, expectedStatus: 200)
+        let bodyData = try? JSONEncoder().encode(body)
+        return try await send(url: try url(for: path), method: "PUT", body: bodyData, expectedStatus: 200)
     }
 
     private static func delete(path: String) async throws {
-        guard let token = AuthService.accessToken else { throw PointSystemError.unauthorized }
-        var request = URLRequest(url: try url(for: path))
-        request.httpMethod = "DELETE"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        _ = try await send(request, expectedStatus: 204)
+        _ = try await send(url: try url(for: path), method: "DELETE", expectedStatus: 204)
     }
 
-    private static func send(_ request: URLRequest, expectedStatus: Int) async throws -> Data {
-        let (data, response): (Data, URLResponse)
+    @discardableResult
+    private static func send(url: URL, method: String = "GET", body: Data? = nil, expectedStatus: Int) async throws -> Data {
+        let (data, status): (Data, Int)
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, status) = try await AuthService.authorizedData(for: url, method: method, body: body)
+        } catch AuthError.sessionExpired {
+            throw PointSystemError.unauthorized
         } catch {
             throw PointSystemError.network
         }
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 401 { throw PointSystemError.unauthorized }
         guard status == expectedStatus else { throw PointSystemError.network }
         return data
