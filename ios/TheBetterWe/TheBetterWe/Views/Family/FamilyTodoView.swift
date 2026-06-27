@@ -44,6 +44,9 @@ struct FamilyTodoView: View {
             }
         }
         .task { await store.load(familyId: familyId) }
+        .onReceive(NotificationCenter.default.publisher(for: .familyTodoDidChange)) { _ in
+            Task { await store.load(familyId: familyId) }
+        }
         .sheet(isPresented: $showCreate) {
             CreateFamilyTodoSheet(store: store, detent: $createDetent)
                 .presentationDetents([.height(560), .height(680)], selection: $createDetent)

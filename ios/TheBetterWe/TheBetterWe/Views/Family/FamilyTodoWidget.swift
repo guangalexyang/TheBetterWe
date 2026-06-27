@@ -84,6 +84,9 @@ struct FamilyTodoWidget: View {
         }
         .padding(16)
         .task { await store.load(familyId: familyId) }
+        .onReceive(NotificationCenter.default.publisher(for: .familyTodoDidChange)) { _ in
+            Task { await store.load(familyId: familyId) }
+        }
     }
 }
 

@@ -133,11 +133,15 @@ struct VoiceInputView: View {
     private var idlePhase: some View {
         VStack(spacing: 14) {
             Spacer()
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Text("说出指令，例如：")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                 Text(verbatim: "\u{201C}给小明加十分，因为他帮忙洗碗\u{201D}")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                Text(verbatim: "\u{201C}提醒我明天去银行\u{201D}")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
@@ -199,7 +203,11 @@ struct VoiceInputView: View {
             transcriptCard
             llmDoneLabel
             if let result = parsedResult {
-                IntentCardView(result: result)
+                if result.isTodoIntent {
+                    TodoIntentCardView(result: result)
+                } else {
+                    IntentCardView(result: result)
+                }
             }
             HStack(spacing: 12) {
                 retryButton
@@ -434,22 +442,48 @@ struct VoiceInputView: View {
     }
 
     private func handleConfirm() {
-        guard voiceState == .parsed,
-              let result = parsedResult,
-              let memberId = result.memberId,
-              let delta = result.delta else { return }
+        guard voiceState == .parsed, let result = parsedResult else { return }
         Task {
-            do {
-                _ = try await PointSystemService.addPointEvent(
-                    familyId: familyId,
-                    memberId: memberId,
-                    delta: delta,
-                    note: result.note,
-                    date: result.date ?? localDateString(),
-                    eventType: result.eventType ?? (delta > 0 ? "add" : "redeem")
-                )
-                NotificationCenter.default.post(name: .pointEventDidChange, object: nil)
-            } catch { }
+            if result.isTodoIntent {
+                guard let title = result.todoTitle,
+                      let todoType = result.todoType,
+                      let priority = result.todoPriority else { return }
+                do {
+                    var dueAt: Int? = nil
+                    if let dateStr = result.date {
+                        let fmt = DateFormatter()
+                        fmt.locale = Locale(identifier: "en_US_POSIX")
+                        fmt.dateFormat = "yyyy-MM-dd"
+                        fmt.timeZone = .current
+                        if let d = fmt.date(from: dateStr) { dueAt = Int(d.timeIntervalSince1970) }
+                    }
+                    _ = try await FamilyTodoService.createTodo(
+                        familyId: familyId,
+                        body: CreateTodoBody(
+                            todoType: todoType,
+                            title: title,
+                            description: result.note,
+                            location: nil,
+                            priority: priority,
+                            dueAt: dueAt
+                        )
+                    )
+                    NotificationCenter.default.post(name: .familyTodoDidChange, object: nil)
+                } catch { }
+            } else {
+                guard let memberId = result.memberId, let delta = result.delta else { return }
+                do {
+                    _ = try await PointSystemService.addPointEvent(
+                        familyId: familyId,
+                        memberId: memberId,
+                        delta: delta,
+                        note: result.note,
+                        date: result.date ?? localDateString(),
+                        eventType: result.eventType ?? (delta > 0 ? "add" : "redeem")
+                    )
+                    NotificationCenter.default.post(name: .pointEventDidChange, object: nil)
+                } catch { }
+            }
             await MainActor.run { dismiss() }
         }
     }
@@ -626,13 +660,77 @@ private struct IntentCardView: View {
     }
 }
 
+// MARK: - TodoIntentCardView
+
+private struct TodoIntentCardView: View {
+    let result: VoiceTranscriptResult
+
+    private var priorityLabel: String {
+        switch result.todoPriority {
+        case "high": return "高"
+        case "low":  return "低"
+        default:     return "中"
+        }
+    }
+
+    private var priorityColor: Color {
+        switch result.todoPriority {
+        case "high": return .red
+        case "low":  return .secondary
+        default:     return .blue
+        }
+    }
+
+    private var typeLabel: String { result.todoType == "personal" ? "个人" : "家庭" }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(VoiceInputStyle.appBlue)
+                .frame(width: 3)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("✓ 创建任务")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoiceInputStyle.appBlue)
+                Text(result.todoTitle ?? "")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.primary)
+                if let note = result.note {
+                    Text(note)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 6) {
+                    Text(typeLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(VoiceInputStyle.appBlue.opacity(0.12))
+                        .foregroundStyle(VoiceInputStyle.appBlue)
+                        .clipShape(Capsule())
+                    Text(priorityLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(priorityColor.opacity(0.12))
+                        .foregroundStyle(priorityColor)
+                        .clipShape(Capsule())
+                }
+            }
+            Spacer()
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(12)
+        .background(VoiceInputStyle.intentCardBackground, in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
 // MARK: - ErrorCardView
 
 private struct ErrorCardView: View {
     private let examples: [(tag: String, example: String)] = [
         ("加分", "给小明加10分"),
         ("扣分", "小红扣了5分"),
-        ("兑换", "小明兑换了20分")
+        ("兑换", "小明兑换了20分"),
+        ("任务", "提醒我去银行")
     ]
 
     var body: some View {
