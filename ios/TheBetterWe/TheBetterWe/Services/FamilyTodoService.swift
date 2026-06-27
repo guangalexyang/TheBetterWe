@@ -4,58 +4,40 @@ enum FamilyTodoService {
     private static let baseURL = AuthService.baseURL
 
     static func fetchTodos(familyId: Int, filter: String = "all") async throws -> FamilyTodoListResponse {
-        let path = "/families/\(familyId)/todos?filter=\(filter)"
-        let url = URL(string: baseURL.absoluteString + path)!
-        guard let token = AuthService.accessToken else { throw URLError(.userAuthenticationRequired) }
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
+        let (data, _) = try await send(path: "/families/\(familyId)/todos?filter=\(filter)", expectedStatus: 200)
         return try JSONDecoder().decode(FamilyTodoListResponse.self, from: data)
     }
 
     static func createTodo(familyId: Int, body: CreateTodoBody) async throws -> FamilyTodo {
-        let url = URL(string: baseURL.absoluteString + "/families/\(familyId)/todos")!
-        guard let token = AuthService.accessToken else { throw URLError(.userAuthenticationRequired) }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 201 else {
-            throw URLError(.badServerResponse)
-        }
+        let bodyData = try JSONEncoder().encode(body)
+        let (data, _) = try await send(path: "/families/\(familyId)/todos", method: "POST", body: bodyData, expectedStatus: 201)
         return try JSONDecoder().decode(FamilyTodo.self, from: data)
     }
 
     static func patchTodo(familyId: Int, todoId: Int, body: PatchTodoBody) async throws -> FamilyTodo {
-        let url = URL(string: baseURL.absoluteString + "/families/\(familyId)/todos/\(todoId)")!
-        guard let token = AuthService.accessToken else { throw URLError(.userAuthenticationRequired) }
-        var req = URLRequest(url: url)
-        req.httpMethod = "PATCH"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
+        let bodyData = try JSONEncoder().encode(body)
+        let (data, _) = try await send(path: "/families/\(familyId)/todos/\(todoId)", method: "PATCH", body: bodyData, expectedStatus: 200)
         return try JSONDecoder().decode(FamilyTodo.self, from: data)
     }
 
     static func deleteTodo(familyId: Int, todoId: Int) async throws {
-        let url = URL(string: baseURL.absoluteString + "/families/\(familyId)/todos/\(todoId)")!
-        guard let token = AuthService.accessToken else { throw URLError(.userAuthenticationRequired) }
-        var req = URLRequest(url: url)
-        req.httpMethod = "DELETE"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let (_, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 204 else {
+        _ = try await send(path: "/families/\(familyId)/todos/\(todoId)", method: "DELETE", expectedStatus: 204)
+    }
+
+    // MARK: - Helper
+
+    @discardableResult
+    private static func send(path: String, method: String = "GET", body: Data? = nil, expectedStatus: Int) async throws -> (Data, Int) {
+        let url = URL(string: baseURL.absoluteString + path)!
+        let (data, status): (Data, Int)
+        do {
+            (data, status) = try await AuthService.authorizedData(for: url, method: method, body: body)
+        } catch AuthError.sessionExpired {
+            throw URLError(.userAuthenticationRequired)
+        } catch {
             throw URLError(.badServerResponse)
         }
+        guard status == expectedStatus else { throw URLError(.badServerResponse) }
+        return (data, status)
     }
 }
