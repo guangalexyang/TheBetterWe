@@ -115,14 +115,19 @@ struct PSGoal: Identifiable, Decodable {
 
 struct VoiceTranscriptResult: Decodable {
     let confidence: String
+    let intentType: String?
     let memberId: Int?
     let memberName: String?
     let delta: Int?
     let note: String?
     let date: String?
     let eventType: String?
+    let todoTitle: String?
+    let todoType: String?
+    let todoPriority: String?
 
     var isHighConfidence: Bool { confidence == "high" }
+    var isTodoIntent: Bool { intentType == "create_todo" }
 
     var deltaDisplay: String {
         guard let d = delta else { return "" }
