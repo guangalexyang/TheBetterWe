@@ -92,8 +92,8 @@ struct FamilyView: View {
             Text(errorMessage ?? "")
         }
         .sheet(isPresented: $showInviteSheet) {
-            Text("TODO: Invite")
-                .presentationDetents([.medium])
+            InviteSheet(membership: membership)
+                .presentationDetents([.height(540)])
         }
         .sheet(isPresented: $showEditSheet) {
             Text("TODO: Edit")
