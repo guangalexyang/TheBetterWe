@@ -49,6 +49,44 @@ enum FamilyService {
         return membership
     }
 
+    static func getInviteCode(familyId: Int) async throws -> String {
+        let data = try await get(path: "/families/\(familyId)/invite-code")
+        struct R: Decodable { let inviteCode: String }
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw FamilyError.network }
+        return r.inviteCode
+    }
+
+    static func refreshInviteCode(familyId: Int) async throws -> String {
+        let data = try await post(path: "/families/\(familyId)/invite-code/refresh",
+                                  body: EmptyBody(), expectedStatus: 200)
+        struct R: Decodable { let inviteCode: String }
+        guard let r = try? JSONDecoder().decode(R.self, from: data) else { throw FamilyError.network }
+        return r.inviteCode
+    }
+
+    static func lookupByInviteCode(_ code: String) async throws -> FamilyPreview {
+        let data = try await get(path: "/families/by-invite/\(code)")
+        guard let preview = try? JSONDecoder().decode(FamilyPreview.self, from: data) else {
+            throw FamilyError.network
+        }
+        return preview
+    }
+
+    static func joinFamily(inviteCode: String, displayName: String, role: String) async throws -> [FamilyMembership] {
+        struct Body: Encodable { let inviteCode: String; let displayName: String; let role: String }
+        let data = try await post(
+            path: "/families/join",
+            body: Body(inviteCode: inviteCode, displayName: displayName, role: role),
+            expectedStatus: 200
+        )
+        guard let memberships = try? JSONDecoder().decode([FamilyMembership].self, from: data) else {
+            throw FamilyError.network
+        }
+        return memberships
+    }
+
+    private struct EmptyBody: Encodable {}
+
     // MARK: - Helpers
 
     private static func get(path: String) async throws -> Data {
