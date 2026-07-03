@@ -8,6 +8,7 @@ final class FeatureToggle {
         case familyTodo
         case familyNotes
         case orderFromMe
+        case familyInviteQR
     }
 
     private static let cacheKey = "feature_toggle_flags"

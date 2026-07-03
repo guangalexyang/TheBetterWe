@@ -6,9 +6,10 @@ const router = Router();
 // Replace with DB-backed values when flags are introduced.
 router.get('/', (_req, res) => {
   res.json({
-    familyTodo:  true,
-    familyNotes: false,
-    orderFromMe: false,
+    familyTodo:     true,
+    familyNotes:    false,
+    orderFromMe:    false,
+    familyInviteQR: false,
   });
 });
 
