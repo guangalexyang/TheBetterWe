@@ -1,12 +1,5 @@
 import SwiftUI
 
-private let roleOptions: [(label: String, value: String, icon: String)] = [
-    ("爸爸 Dad",  "dad",   "person.fill"),
-    ("妈妈 Mom",  "mom",   "person.fill"),
-    ("孩子 Kid",  "child", "star.fill"),
-    ("其他 Other","other", "person.2.fill"),
-]
-
 struct JoinFamilyView: View {
     let inviteCode: String
     let familyName: String
@@ -19,6 +12,15 @@ struct JoinFamilyView: View {
     @State private var errorMessage: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
+
+    private var roleOptions: [(label: String, value: String, icon: String)] {
+        [
+            (String(localized: "爸爸"), "dad",   "person.fill"),
+            (String(localized: "妈妈"), "mom",   "person.fill"),
+            (String(localized: "孩子"), "child", "star.fill"),
+            (String(localized: "其他"), "other", "person.2.fill"),
+        ]
+    }
 
     private var effectiveRole: String {
         selectedRole == "other" && !customRole.trimmingCharacters(in: .whitespaces).isEmpty
@@ -43,7 +45,6 @@ struct JoinFamilyView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // Family banner
                 VStack(spacing: 6) {
                     Image(systemName: "house.fill")
                         .font(.system(size: 36))
@@ -51,7 +52,7 @@ struct JoinFamilyView: View {
                     Text(verbatim: familyName)
                         .font(.title2.bold())
                         .foregroundStyle(.white)
-                    Text("加入此家庭 / Joining this family")
+                    Text("加入此家庭")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.75))
                 }
@@ -60,13 +61,12 @@ struct JoinFamilyView: View {
                 .background(headerGradient)
 
                 VStack(spacing: 20) {
-                    // Display name field
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("你的名字 / Your name in family")
+                        Text("你的名字")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
 
-                        TextField("e.g. 爸爸 / Dad", text: $displayName)
+                        TextField("你的名字", text: $displayName)
                             .font(.body)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
@@ -78,9 +78,8 @@ struct JoinFamilyView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
 
-                    // Role picker
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("我的身份 / My role")
+                        Text("我的身份")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
 
@@ -96,9 +95,8 @@ struct JoinFamilyView: View {
                             }
                         }
 
-                        // Custom role field — shown only when Other is selected
                         if selectedRole == "other" {
-                            TextField("自定义身份 / Custom role (e.g. grandpa)", text: $customRole)
+                            TextField("自定义身份", text: $customRole)
                                 .font(.body)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
@@ -120,7 +118,6 @@ struct JoinFamilyView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    // Join button
                     Button {
                         Task { await joinFamily() }
                     } label: {
@@ -128,7 +125,7 @@ struct JoinFamilyView: View {
                             if isJoining {
                                 ProgressView().tint(.white)
                             } else {
-                                Text("加入家庭 / Join Family")
+                                Text("加入家庭")
                                     .font(.body.bold())
                             }
                         }
@@ -170,10 +167,10 @@ struct JoinFamilyView: View {
             )
             onComplete(memberships)
         } catch FamilyError.alreadyMember {
-            errorMessage = "已经是该家庭的成员 / Already a member of this family"
+            errorMessage = String(localized: "已经是该家庭的成员")
             isJoining = false
         } catch FamilyError.notFound {
-            errorMessage = "邀请码已失效 / Invite code is no longer valid"
+            errorMessage = String(localized: "邀请码已失效")
             isJoining = false
         } catch {
             errorMessage = error.localizedDescription

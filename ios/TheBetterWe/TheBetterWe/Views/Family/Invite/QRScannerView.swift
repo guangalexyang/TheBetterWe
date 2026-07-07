@@ -16,16 +16,13 @@ struct QRScannerView: View {
 
     var body: some View {
         ZStack {
-            // Full-screen camera
             DataScannerRepresentable(onCodeScanned: handleScanned)
                 .ignoresSafeArea()
 
-            // Sweep line animation overlay
             SweepLineView()
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Top bar
                 HStack {
                     Button { dismiss() } label: {
                         Image(systemName: "chevron.left")
@@ -39,7 +36,6 @@ struct QRScannerView: View {
                 .padding(.top, 56)
                 .padding(.leading, 20)
 
-                // Error banner
                 if let err = errorMessage {
                     Text(err)
                         .font(.subheadline)
@@ -52,13 +48,11 @@ struct QRScannerView: View {
 
                 Spacer()
 
-                // Hint text
-                Text("识别二维码 · Scan QR code to join")
+                Text("识别二维码")
                     .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(0.55))
                     .padding(.bottom, 12)
 
-                // Bottom album strip
                 HStack {
                     Spacer()
                     Button { showPhotoPicker = true } label: {
@@ -66,7 +60,7 @@ struct QRScannerView: View {
                             Image(systemName: "photo.on.rectangle")
                                 .font(.system(size: 22))
                                 .foregroundStyle(.white.opacity(0.8))
-                            Text("相册 / Album")
+                            Text("相册")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.6))
                         }
@@ -102,7 +96,7 @@ struct QRScannerView: View {
     private func handleScanned(_ raw: String) {
         guard !isLookingUp else { return }
         guard let code = extractCode(from: raw) else {
-            errorMessage = "无效的邀请码 / Invalid invite code"
+            errorMessage = String(localized: "无效的邀请码")
             return
         }
         isLookingUp = true
@@ -117,7 +111,7 @@ struct QRScannerView: View {
                 }
             } catch FamilyError.notFound {
                 await MainActor.run {
-                    errorMessage = "无效的邀请码 / Invalid invite code"
+                    errorMessage = String(localized: "无效的邀请码")
                     isLookingUp = false
                 }
             } catch {
@@ -148,7 +142,7 @@ struct QRScannerView: View {
         let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
         try? handler.perform([request])
         guard let payload = request.results?.first?.payloadStringValue else {
-            await MainActor.run { errorMessage = "未找到二维码 / No QR code found" }
+            await MainActor.run { errorMessage = String(localized: "未找到二维码") }
             return
         }
         await MainActor.run { handleScanned(payload) }

@@ -98,7 +98,7 @@ struct InviteSheet: View {
 
                 Button { saveToPhotos() } label: {
                     Label(
-                        savedToPhotos ? "已保存 Saved" : "存储到相册",
+                        savedToPhotos ? "已保存" : "存储到相册",
                         systemImage: savedToPhotos ? "checkmark" : "arrow.down.to.line"
                     )
                     .font(.body.bold())
@@ -235,7 +235,7 @@ struct InviteSheet: View {
                 .font: subFont,
                 .foregroundColor: UIColor(white: 0.55, alpha: 1)
             ]
-            let subText = "扫码加入 · Scan to join"
+            let subText = String(localized: "扫码加入")
             let subSize = subText.size(withAttributes: subAttrs)
             subText.draw(at: CGPoint(
                 x: cardW / 2 - subSize.width / 2,
