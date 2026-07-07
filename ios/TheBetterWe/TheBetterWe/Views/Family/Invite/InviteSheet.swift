@@ -177,9 +177,14 @@ struct InviteSheet: View {
         guard let image = qrImage,
               let scene = UIApplication.shared.connectedScenes
                   .compactMap({ $0 as? UIWindowScene }).first,
-              let window = scene.windows.first else { return }
+              let window = scene.windows.first(where: { $0.isKeyWindow }),
+              let root = window.rootViewController else { return }
         let av = UIActivityViewController(activityItems: [image], applicationActivities: nil)
-        window.rootViewController?.present(av, animated: true)
+        var presenter = root
+        while let presented = presenter.presentedViewController {
+            presenter = presented
+        }
+        presenter.present(av, animated: true)
     }
 
     private func saveToPhotos() {
