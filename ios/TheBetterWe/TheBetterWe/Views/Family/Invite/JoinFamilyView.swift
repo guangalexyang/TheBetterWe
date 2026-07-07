@@ -14,10 +14,22 @@ struct JoinFamilyView: View {
 
     @State private var displayName: String = AuthService.displayName ?? ""
     @State private var selectedRole: String = "dad"
+    @State private var customRole: String = ""
     @State private var isJoining = false
     @State private var errorMessage: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
+
+    private var effectiveRole: String {
+        selectedRole == "other" && !customRole.trimmingCharacters(in: .whitespaces).isEmpty
+            ? customRole.trimmingCharacters(in: .whitespaces).lowercased()
+            : selectedRole
+    }
+
+    private var canJoin: Bool {
+        !displayName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !(selectedRole == "other" && customRole.trimmingCharacters(in: .whitespaces).isEmpty)
+    }
 
     private let headerGradient = LinearGradient(
         colors: [
@@ -83,7 +95,23 @@ struct JoinFamilyView: View {
                                 }
                             }
                         }
+
+                        // Custom role field — shown only when Other is selected
+                        if selectedRole == "other" {
+                            TextField("自定义身份 / Custom role (e.g. grandpa)", text: $customRole)
+                                .font(.body)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .background(theme.cardSurface)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(theme.primaryAccent.opacity(0.5), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
                     }
+                    .animation(.easeInOut(duration: 0.2), value: selectedRole)
 
                     if let err = errorMessage {
                         Text(err)
@@ -106,13 +134,11 @@ struct JoinFamilyView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(displayName.trimmingCharacters(in: .whitespaces).isEmpty
-                            ? theme.primaryAccent.opacity(0.4)
-                            : theme.primaryAccent)
+                        .background(canJoin ? theme.primaryAccent : theme.primaryAccent.opacity(0.4))
                         .foregroundStyle(.white)
                         .clipShape(Capsule())
                     }
-                    .disabled(displayName.trimmingCharacters(in: .whitespaces).isEmpty || isJoining)
+                    .disabled(!canJoin || isJoining)
                 }
                 .padding(20)
             }
@@ -133,15 +159,14 @@ struct JoinFamilyView: View {
     }
 
     private func joinFamily() async {
-        let name = displayName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
+        guard canJoin else { return }
         isJoining = true
         errorMessage = nil
         do {
             let memberships = try await FamilyService.joinFamily(
                 inviteCode: inviteCode,
-                displayName: name,
-                role: selectedRole
+                displayName: displayName.trimmingCharacters(in: .whitespaces),
+                role: effectiveRole
             )
             onComplete(memberships)
         } catch FamilyError.alreadyMember {

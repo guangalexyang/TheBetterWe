@@ -20,6 +20,10 @@ struct QRScannerView: View {
             DataScannerRepresentable(onCodeScanned: handleScanned)
                 .ignoresSafeArea()
 
+            // Sweep line animation overlay
+            SweepLineView()
+                .ignoresSafeArea()
+
             VStack(spacing: 0) {
                 // Top bar
                 HStack {
@@ -148,6 +152,38 @@ struct QRScannerView: View {
             return
         }
         await MainActor.run { handleScanned(payload) }
+    }
+}
+
+// MARK: - Sweep line animation
+
+private struct SweepLineView: View {
+    @State private var offset: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let h = geo.size.height
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [.green.opacity(0), .green.opacity(0.9), .green.opacity(0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(height: 3)
+                .offset(y: offset)
+                .onAppear {
+                    offset = 0
+                    withAnimation(
+                        .linear(duration: 2.4)
+                        .repeatForever(autoreverses: true)
+                    ) {
+                        offset = h - 3
+                    }
+                }
+        }
+        .allowsHitTesting(false)
     }
 }
 

@@ -2396,6 +2396,74 @@
         }
       }
     },
+    "已经是该家庭的成员 / Already a member of this family" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Already a member of this family"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已经是该家庭的成员"
+          }
+        }
+      }
+    },
+    "邀请码已失效 / Invite code is no longer valid" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invite code is no longer valid"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "邀请码已失效"
+          }
+        }
+      }
+    },
+    "无效的邀请码 / Invalid invite code" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid invite code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无效的邀请码"
+          }
+        }
+      }
+    },
+    "未找到二维码 / No QR code found" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No QR code found"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未找到二维码"
+          }
+        }
+      }
+    },
     "分享二维码" : {
       "extractionState" : "manual",
       "localizations" : {
