@@ -33,7 +33,7 @@ enum AuthService {
                 try await existing.value
                 return
             }
-            let task = Task(operation: work)
+            let task = Task { try await work() }
             ongoingTask = task
             defer { ongoingTask = nil }
             try await task.value

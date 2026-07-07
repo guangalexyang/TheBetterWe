@@ -9,7 +9,7 @@ router.get('/', (_req, res) => {
     familyTodo:     true,
     familyNotes:    false,
     orderFromMe:    false,
-    familyInviteQR: false,
+    familyInviteQR: true,
   });
 });
 

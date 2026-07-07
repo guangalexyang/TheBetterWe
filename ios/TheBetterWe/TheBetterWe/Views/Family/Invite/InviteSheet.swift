@@ -10,6 +10,7 @@ struct InviteSheet: View {
     @State private var isLoading = false
     @State private var isRefreshing = false
     @State private var errorMessage: String? = nil
+    @State private var savedToPhotos = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
 
@@ -109,16 +110,20 @@ struct InviteSheet: View {
                 .disabled(qrImage == nil)
 
                 Button { saveToPhotos() } label: {
-                    Label("存储到相册", systemImage: "arrow.down.to.line")
-                        .font(.body.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(theme.cardSurface)
-                        .foregroundStyle(.primary)
-                        .overlay(Capsule().stroke(theme.cardBorder, lineWidth: 1))
-                        .clipShape(Capsule())
+                    Label(
+                        savedToPhotos ? "已保存 Saved" : "存储到相册",
+                        systemImage: savedToPhotos ? "checkmark" : "arrow.down.to.line"
+                    )
+                    .font(.body.bold())
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(savedToPhotos ? Color.green.opacity(0.15) : theme.cardSurface)
+                    .foregroundStyle(savedToPhotos ? .green : .primary)
+                    .overlay(Capsule().stroke(savedToPhotos ? Color.green.opacity(0.4) : theme.cardBorder, lineWidth: 1))
+                    .clipShape(Capsule())
+                    .animation(.easeInOut(duration: 0.25), value: savedToPhotos)
                 }
-                .disabled(qrImage == nil)
+                .disabled(qrImage == nil || savedToPhotos)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 36)
@@ -145,6 +150,7 @@ struct InviteSheet: View {
     private func refresh() async {
         isRefreshing = true
         errorMessage = nil
+        savedToPhotos = false
         do {
             let code = try await FamilyService.refreshInviteCode(familyId: membership.familyId)
             inviteCode = code
@@ -180,6 +186,11 @@ struct InviteSheet: View {
         guard let image = qrImage else { return }
         PHPhotoLibrary.shared().performChanges({
             PHAssetChangeRequest.creationRequestForAsset(from: image)
-        }, completionHandler: nil)
+        }, completionHandler: { success, _ in
+            guard success else { return }
+            DispatchQueue.main.async {
+                withAnimation { savedToPhotos = true }
+            }
+        })
     }
 }
