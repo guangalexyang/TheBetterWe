@@ -5,6 +5,7 @@ struct NoFamilyView: View {
     var onComplete: ([FamilyMembership]) -> Void = { _ in }
 
     @State private var navigateToCreate = false
+    @State private var navigateToScan = false
     @Environment(\.appTheme) private var theme
 
     var body: some View {
@@ -54,7 +55,7 @@ struct NoFamilyView: View {
                     }
 
                     Button {
-                        // TODO: navigate to JoinFamilyView
+                        navigateToScan = true
                     } label: {
                         Text("Scan QR code to join")
                             .font(.body.bold())
@@ -72,6 +73,9 @@ struct NoFamilyView: View {
             }
             .navigationDestination(isPresented: $navigateToCreate) {
                 CreateFamilyView(displayName: displayName, onComplete: onComplete)
+            }
+            .navigationDestination(isPresented: $navigateToScan) {
+                QRScannerView(onComplete: onComplete)
             }
             .toolbar(.hidden, for: .navigationBar)
             .background(

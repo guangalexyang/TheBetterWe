@@ -266,7 +266,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "佳家";
+				INFOPLIST_KEY_NSCameraUsageDescription = "扫描二维码加入家庭 / Scan a QR code to join a family";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要麦克风权限";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "保存二维码到相册 / Save the QR code to your photo library";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "语音识别用于将语音转为积分记录";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -301,7 +303,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "佳家";
+				INFOPLIST_KEY_NSCameraUsageDescription = "扫描二维码加入家庭 / Scan a QR code to join a family";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "语音输入需要麦克风权限";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "保存二维码到相册 / Save the QR code to your photo library";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "语音识别用于将语音转为积分记录";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
