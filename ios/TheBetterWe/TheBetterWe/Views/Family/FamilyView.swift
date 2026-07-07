@@ -93,7 +93,7 @@ struct FamilyView: View {
         }
         .sheet(isPresented: $showInviteSheet) {
             InviteSheet(membership: membership)
-                .presentationDetents([.height(540)])
+                .presentationDetents([.height(580)])
         }
         .sheet(isPresented: $showEditSheet) {
             Text("TODO: Edit")

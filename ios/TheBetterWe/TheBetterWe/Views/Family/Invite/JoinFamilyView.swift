@@ -1,12 +1,5 @@
 import SwiftUI
 
-private let roleOptions: [(label: String, value: String, icon: String)] = [
-    ("爸爸 Dad",  "dad",   "person.fill"),
-    ("妈妈 Mom",  "mom",   "person.fill"),
-    ("孩子 Kid",  "child", "star.fill"),
-    ("其他 Other","other", "person.2.fill"),
-]
-
 struct JoinFamilyView: View {
     let inviteCode: String
     let familyName: String
@@ -14,10 +7,31 @@ struct JoinFamilyView: View {
 
     @State private var displayName: String = AuthService.displayName ?? ""
     @State private var selectedRole: String = "dad"
+    @State private var customRole: String = ""
     @State private var isJoining = false
     @State private var errorMessage: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appTheme) private var theme
+
+    private var roleOptions: [(label: String, value: String, icon: String)] {
+        [
+            (String(localized: "爸爸"), "dad",   "person.fill"),
+            (String(localized: "妈妈"), "mom",   "person.fill"),
+            (String(localized: "孩子"), "child", "star.fill"),
+            (String(localized: "其他"), "other", "person.2.fill"),
+        ]
+    }
+
+    private var effectiveRole: String {
+        selectedRole == "other" && !customRole.trimmingCharacters(in: .whitespaces).isEmpty
+            ? customRole.trimmingCharacters(in: .whitespaces).lowercased()
+            : selectedRole
+    }
+
+    private var canJoin: Bool {
+        !displayName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !(selectedRole == "other" && customRole.trimmingCharacters(in: .whitespaces).isEmpty)
+    }
 
     private let headerGradient = LinearGradient(
         colors: [
@@ -31,7 +45,6 @@ struct JoinFamilyView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // Family banner
                 VStack(spacing: 6) {
                     Image(systemName: "house.fill")
                         .font(.system(size: 36))
@@ -39,7 +52,7 @@ struct JoinFamilyView: View {
                     Text(verbatim: familyName)
                         .font(.title2.bold())
                         .foregroundStyle(.white)
-                    Text("加入此家庭 / Joining this family")
+                    Text("加入此家庭")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.75))
                 }
@@ -48,13 +61,12 @@ struct JoinFamilyView: View {
                 .background(headerGradient)
 
                 VStack(spacing: 20) {
-                    // Display name field
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("你的名字 / Your name in family")
+                        Text("你的名字")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
 
-                        TextField("e.g. 爸爸 / Dad", text: $displayName)
+                        TextField("你的名字", text: $displayName)
                             .font(.body)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 12)
@@ -66,9 +78,8 @@ struct JoinFamilyView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
 
-                    // Role picker
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("我的身份 / My role")
+                        Text("我的身份")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
 
@@ -83,7 +94,22 @@ struct JoinFamilyView: View {
                                 }
                             }
                         }
+
+                        if selectedRole == "other" {
+                            TextField("自定义身份", text: $customRole)
+                                .font(.body)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .background(theme.cardSurface)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(theme.primaryAccent.opacity(0.5), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
                     }
+                    .animation(.easeInOut(duration: 0.2), value: selectedRole)
 
                     if let err = errorMessage {
                         Text(err)
@@ -92,7 +118,6 @@ struct JoinFamilyView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    // Join button
                     Button {
                         Task { await joinFamily() }
                     } label: {
@@ -100,19 +125,17 @@ struct JoinFamilyView: View {
                             if isJoining {
                                 ProgressView().tint(.white)
                             } else {
-                                Text("加入家庭 / Join Family")
+                                Text("加入家庭")
                                     .font(.body.bold())
                             }
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(displayName.trimmingCharacters(in: .whitespaces).isEmpty
-                            ? theme.primaryAccent.opacity(0.4)
-                            : theme.primaryAccent)
+                        .background(canJoin ? theme.primaryAccent : theme.primaryAccent.opacity(0.4))
                         .foregroundStyle(.white)
                         .clipShape(Capsule())
                     }
-                    .disabled(displayName.trimmingCharacters(in: .whitespaces).isEmpty || isJoining)
+                    .disabled(!canJoin || isJoining)
                 }
                 .padding(20)
             }
@@ -133,22 +156,21 @@ struct JoinFamilyView: View {
     }
 
     private func joinFamily() async {
-        let name = displayName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty else { return }
+        guard canJoin else { return }
         isJoining = true
         errorMessage = nil
         do {
             let memberships = try await FamilyService.joinFamily(
                 inviteCode: inviteCode,
-                displayName: name,
-                role: selectedRole
+                displayName: displayName.trimmingCharacters(in: .whitespaces),
+                role: effectiveRole
             )
             onComplete(memberships)
         } catch FamilyError.alreadyMember {
-            errorMessage = "已经是该家庭的成员 / Already a member of this family"
+            errorMessage = String(localized: "已经是该家庭的成员")
             isJoining = false
         } catch FamilyError.notFound {
-            errorMessage = "邀请码已失效 / Invite code is no longer valid"
+            errorMessage = String(localized: "邀请码已失效")
             isJoining = false
         } catch {
             errorMessage = error.localizedDescription
