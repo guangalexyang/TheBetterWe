@@ -7,12 +7,16 @@ enum FamilyTab: Hashable {
 
 struct FamilyView: View {
     var membership: FamilyMembership
+    var memberships: [FamilyMembership] = []
     var onDeleted: () -> Void = {}
     var onLogOut: () -> Void = {}
+    var onSwitchFamily: (FamilyMembership) -> Void = { _ in }
+    var onFamiliesUpdated: ([FamilyMembership]) -> Void = { _ in }
 
     @State private var selectedTab: FamilyTab = .dashboard
     @State private var pointSystemInitialChildId: Int? = nil
     @State private var showDrawer = false
+    @State private var showSwitcher = false
     @State private var showInviteSheet = false
     @State private var showEditSheet = false
     @State private var showDeleteConfirm = false
@@ -52,6 +56,10 @@ struct FamilyView: View {
             FamilyLeftDrawer(
                 membership: membership,
                 onDismiss: { showDrawer = false },
+                onSwitchFamily: {
+                    showDrawer = false
+                    showSwitcher = true
+                },
                 onInvite: {
                     showDrawer = false
                     showInviteSheet = true
@@ -89,6 +97,14 @@ struct FamilyView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .sheet(isPresented: $showSwitcher) {
+            FamilySwitcherView(
+                memberships: memberships,
+                currentFamilyId: membership.familyId,
+                onSwitch: onSwitchFamily,
+                onFamiliesUpdated: onFamiliesUpdated
+            )
         }
         .sheet(isPresented: $showInviteSheet) {
             InviteSheet(membership: membership)
@@ -194,6 +210,7 @@ private struct TabLabel: View {
 private struct FamilyLeftDrawer: View {
     let membership: FamilyMembership
     let onDismiss: () -> Void
+    let onSwitchFamily: () -> Void
     let onInvite: () -> Void
     let onEdit: () -> Void
     @Environment(\.appTheme) private var theme
@@ -235,7 +252,7 @@ private struct FamilyLeftDrawer: View {
 
             // Content
             VStack(spacing: 0) {
-                verbatimRow(icon: "house", label: membership.familyName, action: { /* future: multi-family picker */ })
+                verbatimRow(icon: "house", label: membership.familyName, action: onSwitchFamily)
                 drawerRow(icon: "person.badge.plus", label: "Invite", action: onInvite)
                 drawerRow(icon: "pencil", label: "Edit", action: onEdit)
             }
