@@ -28,41 +28,40 @@ struct FamilyView: View {
     }
 
     var body: some View {
+        let drawerW = UIScreen.main.bounds.width * 0.75
+
         ZStack(alignment: .leading) {
             VStack(spacing: 0) {
                 FamilyTopBar(selectedTab: $selectedTab, tabs: tabs) {
-                    withAnimation(.easeInOut(duration: 0.25)) { showDrawer = true }
+                    showDrawer = true
                 }
                 Rectangle()
                     .fill(theme.cardBorder)
                     .frame(height: 0.5)
                 tabContent
             }
-
-            if showDrawer {
-                Color.black.opacity(0.3)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.25)) { showDrawer = false }
-                    }
-                    .transition(.opacity)
-
-                FamilyLeftDrawer(
-                    membership: membership,
-                    onDismiss: {
-                        withAnimation(.easeInOut(duration: 0.25)) { showDrawer = false }
-                    },
-                    onInvite: {
-                        withAnimation(.easeInOut(duration: 0.25)) { showDrawer = false }
-                        showInviteSheet = true
-                    },
-                    onEdit: {
-                        withAnimation(.easeInOut(duration: 0.25)) { showDrawer = false }
-                        showEditSheet = true
-                    }
-                )
-                .transition(.move(edge: .leading))
+            .offset(x: showDrawer ? drawerW : 0)
+            .overlay {
+                if showDrawer {
+                    Color.black.opacity(0.2)
+                        .ignoresSafeArea()
+                        .onTapGesture { showDrawer = false }
+                }
             }
+
+            FamilyLeftDrawer(
+                membership: membership,
+                onDismiss: { showDrawer = false },
+                onInvite: {
+                    showDrawer = false
+                    showInviteSheet = true
+                },
+                onEdit: {
+                    showDrawer = false
+                    showEditSheet = true
+                }
+            )
+            .offset(x: showDrawer ? 0 : -drawerW)
         }
         .animation(.easeInOut(duration: 0.25), value: showDrawer)
         .onChange(of: selectedTab) { _, newTab in
@@ -140,13 +139,13 @@ private struct FamilyTopBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Button(action: onMenu) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 20))
-                    .foregroundStyle(theme.navIconColor)
-                    .padding(.leading, 16)
-                    .padding(.trailing, 8)
-            }
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 20))
+                .foregroundStyle(theme.navIconColor)
+                .padding(.leading, 16)
+                .padding(.trailing, 8)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onMenu)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
