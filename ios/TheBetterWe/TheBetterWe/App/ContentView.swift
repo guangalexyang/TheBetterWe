@@ -11,6 +11,7 @@ enum AppState {
 struct ContentView: View {
     @State private var isAuthenticated = AuthService.isAuthenticated
     @State private var appState: AppState = AuthService.displayName == nil ? .needsDisplayName : .loading
+    @State private var selectedFamilyId: Int? = nil
 
     var body: some View {
         Group {
@@ -30,17 +31,25 @@ struct ContentView: View {
                         onComplete: { memberships in appState = .hasFamily(memberships) }
                     )
                 case .hasFamily(let memberships):
+                    let current = memberships.first(where: { $0.familyId == selectedFamilyId }) ?? memberships[0]
                     MainTabView(
-                        membership: memberships[0],
+                        memberships: memberships,
+                        currentMembership: current,
                         onLogOut: {
                             isAuthenticated = false
                             appState = .needsDisplayName
                         },
-                        onFamilyDeleted: { appState = .noFamily }
+                        onFamilyDeleted: { appState = .noFamily },
+                        onSwitchFamily: { m in selectedFamilyId = m.familyId },
+                        onFamiliesUpdated: { newList in
+                            selectedFamilyId = newList.last?.familyId
+                            appState = .hasFamily(newList)
+                        }
                     )
                 case .offline:
                     MainTabView(
-                        membership: FamilyMembership(familyId: 0, familyName: "", memberId: 0, displayName: "", roleKeywords: []),
+                        memberships: [FamilyMembership(familyId: 0, familyName: "", memberId: 0, displayName: "", roleKeywords: [])],
+                        currentMembership: FamilyMembership(familyId: 0, familyName: "", memberId: 0, displayName: "", roleKeywords: []),
                         onLogOut: {
                             isAuthenticated = false
                             appState = .needsDisplayName

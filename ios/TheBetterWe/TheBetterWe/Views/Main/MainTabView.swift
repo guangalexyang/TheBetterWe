@@ -5,9 +5,12 @@ enum AppTab {
 }
 
 struct MainTabView: View {
-    var membership: FamilyMembership
+    var memberships: [FamilyMembership]
+    var currentMembership: FamilyMembership
     var onLogOut: () -> Void = {}
     var onFamilyDeleted: () -> Void = {}
+    var onSwitchFamily: (FamilyMembership) -> Void = { _ in }
+    var onFamiliesUpdated: ([FamilyMembership]) -> Void = { _ in }
 
     @State private var selectedTab: AppTab = .family
     @State private var showCreate = false
@@ -27,9 +30,17 @@ struct MainTabView: View {
 
             Group {
                 switch selectedTab {
-                case .family: FamilyView(membership: membership, onDeleted: onFamilyDeleted, onLogOut: onLogOut)
+                case .family:
+                    FamilyView(
+                        membership: currentMembership,
+                        memberships: memberships,
+                        onDeleted: onFamilyDeleted,
+                        onLogOut: onLogOut,
+                        onSwitchFamily: onSwitchFamily,
+                        onFamiliesUpdated: onFamiliesUpdated
+                    )
                 case .me: MeView(
-                    membership: membership,
+                    membership: currentMembership,
                     onMenuTap: { withAnimation(.easeInOut(duration: 0.25)) { showMenu = true } },
                     onLogOut: onLogOut
                 )
@@ -62,7 +73,7 @@ struct MainTabView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: showMenu)
         .sheet(isPresented: $showCreate) {
-            VoiceInputView(familyId: membership.familyId)
+            VoiceInputView(familyId: currentMembership.familyId)
                 .presentationDragIndicator(.hidden)
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -186,9 +197,8 @@ private struct CustomTabBar: View {
 }
 
 #Preview {
-    MainTabView(membership: FamilyMembership(
-        familyId: 1, familyName: "The Yangs", memberId: 1,
-        displayName: "Dad", roleKeywords: ["familyTodo", "pointSystem", "familyNotes"]
-    ))
-    .environment(ThemeManager())
+    let m = FamilyMembership(familyId: 1, familyName: "The Yangs", memberId: 1,
+                             displayName: "Dad", roleKeywords: ["familyTodo", "pointSystem", "familyNotes"])
+    MainTabView(memberships: [m], currentMembership: m)
+        .environment(ThemeManager())
 }
