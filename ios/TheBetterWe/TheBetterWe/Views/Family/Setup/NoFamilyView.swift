@@ -25,11 +25,11 @@ struct NoFamilyView: View {
                             .multilineTextAlignment(.center)
                     }
 
-                    Text("你还没有加入家庭")
+                    Text("You're not in a family yet")
                         .font(.title2.bold())
                         .multilineTextAlignment(.center)
 
-                    Text("创建新家庭，或扫描邀请码加入已有家庭。")
+                    Text("Create a new family or join one with an invite code.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
