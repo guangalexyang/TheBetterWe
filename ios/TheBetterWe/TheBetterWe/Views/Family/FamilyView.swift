@@ -98,7 +98,7 @@ struct FamilyView: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        .sheet(isPresented: $showSwitcher) {
+        .navigationDestination(isPresented: $showSwitcher) {
             FamilySwitcherView(
                 memberships: memberships,
                 currentFamilyId: membership.familyId,

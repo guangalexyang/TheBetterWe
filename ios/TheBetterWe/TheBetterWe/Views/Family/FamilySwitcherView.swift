@@ -20,7 +20,29 @@ struct FamilySwitcherView: View {
     )
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Custom top bar
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .padding(8)
+                }
+                Spacer()
+                Text("切换家庭")
+                    .font(.headline.bold())
+                Spacer()
+                Color.clear.frame(width: 33, height: 33)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 56)
+            .padding(.bottom, 8)
+
+            Rectangle()
+                .fill(theme.cardBorder)
+                .frame(height: 0.5)
+
             ScrollView {
                 VStack(spacing: 0) {
                     // Membership rows
@@ -72,26 +94,14 @@ struct FamilySwitcherView: View {
                     .padding(.top, 8)
                 }
             }
-            .background(theme.pageBg.ignoresSafeArea())
-            .navigationTitle("切换家庭")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(8)
-                            .background(Color(.systemGray5), in: Circle())
-                    }
-                }
-            }
-            .navigationDestination(isPresented: $navigateToAdd) {
-                AddFamilyView(onComplete: { newList in
-                    onFamiliesUpdated(newList)
-                    dismiss()
-                })
-            }
+        }
+        .background(theme.pageBg.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $navigateToAdd) {
+            AddFamilyView(onComplete: { newList in
+                onFamiliesUpdated(newList)
+                dismiss()
+            })
         }
     }
 
